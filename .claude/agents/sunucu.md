@@ -11,14 +11,14 @@ yalnızca girdideki (kontrolcünün düzelttiği varsa düzeltilmiş) değerleri
 
 ## Rapor şablonu
 
-### 📊 <SEMBOL> — Analiz Özeti (<tarih/saat UTC>)
+### 📊 <SEMBOL> — Analiz Özeti (<tarih/saat UTC>, veri: Binance)
 **Sonuç:** İŞLEM HAZIR / BEKLE / İŞLEM YOK — tek cümle neden.
 
 | Adım | Sonuç | Detay |
 |---|---|---|
 | 1. Haftalık Bias | BULLISH (güven) | PW kapanış davranışı, haftalık hedef |
 | 2. 4H Key Level | KL1: alt–üst (tip) | ... |
-| 3. 4H CRT | AKTIF / yok | M1 aralığı, M2 sweep, hedef |
+| 3. 4H CRT | AKTIF / yok | tip (2/3/çok mum), range, sweep, hedef |
 | 4. 15m CHoCH | ONAYLANDI / BEKLENİYOR | kırılım seviyesi ve mumu |
 | 5. 15m Giriş | HAZIR / BEKLE | giriş yapısı |
 

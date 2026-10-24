@@ -1,11 +1,11 @@
 ---
 name: trade-ekibi
-description: Haftalık bias → 4H key level → 4H CRT → 15m CHoCH → 15m giriş → kontrol → sunum zincirini ajan ekibiyle çalıştırır. Kullanım: /trade-ekibi BTC_USDT
+description: Haftalık bias → 4H key level → 4H CRT → 15m CHoCH → 15m giriş → kontrol → sunum zincirini ajan ekibiyle çalıştırır. Veri Binance'ten gelir. Kullanım: /trade-ekibi BTCUSDT
 ---
 
 # Trade Analiz Ekibi — Orkestrasyon
 
-Argüman: enstrüman adı (Crypto.com formatı, ör. `BTC_USDT`, `ETH_USDT`). Verilmezse kullanıcıya sor.
+Argüman: Binance sembolü (ör. `BTCUSDT`, `ETHUSDT`). Verilmezse kullanıcıya sor.
 
 Ajanlar birbirini çağıramaz; zinciri SEN yönetirsin. Her ajanı `Agent` aracıyla, ilgili
 `subagent_type` ile, önceki adımların JSON çıktılarını prompt'a ekleyerek SIRAYLA çalıştır
@@ -26,5 +26,8 @@ Kurallar:
 - Kontrolcü her zaman çalışır (zincir erken dursa bile, durma kararını doğrular).
 - Kullanıcıya yalnızca `sunucu` raporunu göster; ardından raporun sonundaki sorularla
   kullanıcıyla iletişime devam et. Kullanıcı cevap verirse ilgili ajanı tekrar çağır.
-- Veri kaynağı: Crypto.com MCP (`mcp__Crypto_com__get_candlestick`, zaman dilimleri `7D`, `1D`,
-  `4h`, `15m`; çağrı başına en fazla 50 mum, en yeni başta, `data[0]` kapanmamış mum).
+- Veri kaynağı: Binance public API, ortak script `.claude/skills/trade-ekibi/binance.py`
+  (`mum` → OHLC, `crt` → 2/3/çok mumlu CRT taraması). Mumlar eskiden yeniye sıralı,
+  `kapali: false` mum oluşmaktadır. Futures verisi için `--futures` ekle.
+- Script Binance'e erişemezse zinciri durdur ve kullanıcıya hatayı olduğu gibi bildir;
+  başka kaynaktan veya tahmini veri kullanma.
