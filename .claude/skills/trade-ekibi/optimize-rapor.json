@@ -1,0 +1,442 @@
+{
+ "egitimDonemi": "2026-07-26 – 2026-10-24",
+ "kontrolDonemi": "2026-04-27 – 2026-07-26",
+ "denenenKombinasyon": 5760,
+ "yeterliIslemliKombinasyon": 1585,
+ "mevcutSistem": {
+  "egitim": {
+   "islem": 417,
+   "isabet": 21.3,
+   "netR": -90.99,
+   "ortR": -0.218,
+   "skor": -2.25,
+   "pf": 0.76,
+   "maxDD": -100.33,
+   "long": 272,
+   "short": 145,
+   "coin": 49
+  },
+  "kontrol": {
+   "islem": 324,
+   "isabet": 21.6,
+   "netR": -95.96,
+   "ortR": -0.296,
+   "skor": -3.07,
+   "pf": 0.68,
+   "maxDD": -105.56,
+   "long": 195,
+   "short": 129,
+   "coin": 47
+  }
+ },
+ "secilen": {
+  "kural": {
+   "secim": "genis",
+   "maxRange": 3,
+   "zone": "FVG",
+   "minGuven": "DUSUK",
+   "displacement": false,
+   "maxStop": 99,
+   "minStop": 0.5,
+   "klKalite": "hepsi",
+   "cikis": "TP2"
+  },
+  "egitim": {
+   "islem": 58,
+   "isabet": 43.1,
+   "netR": 37.21,
+   "ortR": 0.642,
+   "skor": 2.05,
+   "pf": 1.97,
+   "maxDD": -14.01,
+   "long": 35,
+   "short": 23,
+   "coin": 30
+  },
+  "kontrol": {
+   "islem": 46,
+   "isabet": 19.6,
+   "netR": -22.79,
+   "ortR": -0.495,
+   "skor": -2.38,
+   "pf": 0.48,
+   "maxDD": -22.79,
+   "long": 22,
+   "short": 24,
+   "coin": 30
+  }
+ },
+ "ilk10Aday": [
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0.5,
+    "klKalite": "hepsi",
+    "cikis": "TP2"
+   },
+   "egitim": {
+    "islem": 58,
+    "isabet": 43.1,
+    "netR": 37.21,
+    "ortR": 0.642,
+    "skor": 2.05,
+    "pf": 1.97,
+    "maxDD": -14.01,
+    "long": 35,
+    "short": 23,
+    "coin": 30
+   },
+   "kontrol": {
+    "islem": 46,
+    "isabet": 19.6,
+    "netR": -22.79,
+    "ortR": -0.495,
+    "skor": -2.38,
+    "pf": 0.48,
+    "maxDD": -22.79,
+    "long": 22,
+    "short": 24,
+    "coin": 30
+   }
+  },
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0.5,
+    "klKalite": "hepsi",
+    "cikis": "TP1"
+   },
+   "egitim": {
+    "islem": 58,
+    "isabet": 43.1,
+    "netR": 37.21,
+    "ortR": 0.642,
+    "skor": 2.05,
+    "pf": 1.97,
+    "maxDD": -14.01,
+    "long": 35,
+    "short": 23,
+    "coin": 30
+   },
+   "kontrol": {
+    "islem": 46,
+    "isabet": 19.6,
+    "netR": -23.93,
+    "ortR": -0.52,
+    "skor": -2.57,
+    "pf": 0.45,
+    "maxDD": -23.93,
+    "long": 22,
+    "short": 24,
+    "coin": 30
+   }
+  },
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0.5,
+    "klKalite": "AB",
+    "cikis": "TP2"
+   },
+   "egitim": {
+    "islem": 58,
+    "isabet": 43.1,
+    "netR": 37.21,
+    "ortR": 0.642,
+    "skor": 2.05,
+    "pf": 1.97,
+    "maxDD": -14.01,
+    "long": 35,
+    "short": 23,
+    "coin": 30
+   },
+   "kontrol": {
+    "islem": 46,
+    "isabet": 19.6,
+    "netR": -22.79,
+    "ortR": -0.495,
+    "skor": -2.38,
+    "pf": 0.48,
+    "maxDD": -22.79,
+    "long": 22,
+    "short": 24,
+    "coin": 30
+   }
+  },
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0.5,
+    "klKalite": "AB",
+    "cikis": "TP1"
+   },
+   "egitim": {
+    "islem": 58,
+    "isabet": 43.1,
+    "netR": 37.21,
+    "ortR": 0.642,
+    "skor": 2.05,
+    "pf": 1.97,
+    "maxDD": -14.01,
+    "long": 35,
+    "short": 23,
+    "coin": 30
+   },
+   "kontrol": {
+    "islem": 46,
+    "isabet": 19.6,
+    "netR": -23.93,
+    "ortR": -0.52,
+    "skor": -2.57,
+    "pf": 0.45,
+    "maxDD": -23.93,
+    "long": 22,
+    "short": 24,
+    "coin": 30
+   }
+  },
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0,
+    "klKalite": "hepsi",
+    "cikis": "TP2"
+   },
+   "egitim": {
+    "islem": 62,
+    "isabet": 41.9,
+    "netR": 37.61,
+    "ortR": 0.607,
+    "skor": 1.98,
+    "pf": 1.88,
+    "maxDD": -17.0,
+    "long": 37,
+    "short": 25,
+    "coin": 31
+   },
+   "kontrol": {
+    "islem": 55,
+    "isabet": 18.2,
+    "netR": -33.87,
+    "ortR": -0.616,
+    "skor": -3.3,
+    "pf": 0.4,
+    "maxDD": -33.87,
+    "long": 26,
+    "short": 29,
+    "coin": 30
+   }
+  },
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0,
+    "klKalite": "hepsi",
+    "cikis": "TP1"
+   },
+   "egitim": {
+    "islem": 62,
+    "isabet": 41.9,
+    "netR": 37.61,
+    "ortR": 0.607,
+    "skor": 1.98,
+    "pf": 1.88,
+    "maxDD": -17.0,
+    "long": 37,
+    "short": 25,
+    "coin": 31
+   },
+   "kontrol": {
+    "islem": 55,
+    "isabet": 18.2,
+    "netR": -35.01,
+    "ortR": -0.637,
+    "skor": -3.51,
+    "pf": 0.38,
+    "maxDD": -35.01,
+    "long": 26,
+    "short": 29,
+    "coin": 30
+   }
+  },
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0,
+    "klKalite": "AB",
+    "cikis": "TP2"
+   },
+   "egitim": {
+    "islem": 62,
+    "isabet": 41.9,
+    "netR": 37.61,
+    "ortR": 0.607,
+    "skor": 1.98,
+    "pf": 1.88,
+    "maxDD": -17.0,
+    "long": 37,
+    "short": 25,
+    "coin": 31
+   },
+   "kontrol": {
+    "islem": 55,
+    "isabet": 18.2,
+    "netR": -33.87,
+    "ortR": -0.616,
+    "skor": -3.3,
+    "pf": 0.4,
+    "maxDD": -33.87,
+    "long": 26,
+    "short": 29,
+    "coin": 30
+   }
+  },
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0,
+    "klKalite": "AB",
+    "cikis": "TP1"
+   },
+   "egitim": {
+    "islem": 62,
+    "isabet": 41.9,
+    "netR": 37.61,
+    "ortR": 0.607,
+    "skor": 1.98,
+    "pf": 1.88,
+    "maxDD": -17.0,
+    "long": 37,
+    "short": 25,
+    "coin": 31
+   },
+   "kontrol": {
+    "islem": 55,
+    "isabet": 18.2,
+    "netR": -35.01,
+    "ortR": -0.637,
+    "skor": -3.51,
+    "pf": 0.38,
+    "maxDD": -35.01,
+    "long": 26,
+    "short": 29,
+    "coin": 30
+   }
+  },
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0,
+    "klKalite": "hepsi",
+    "cikis": "2R"
+   },
+   "egitim": {
+    "islem": 62,
+    "isabet": 51.6,
+    "netR": 22.77,
+    "ortR": 0.367,
+    "skor": 1.92,
+    "pf": 1.65,
+    "maxDD": -9.93,
+    "long": 37,
+    "short": 25,
+    "coin": 31
+   },
+   "kontrol": {
+    "islem": 55,
+    "isabet": 30.9,
+    "netR": -17.35,
+    "ortR": -0.316,
+    "skor": -1.64,
+    "pf": 0.64,
+    "maxDD": -19.19,
+    "long": 26,
+    "short": 29,
+    "coin": 30
+   }
+  },
+  {
+   "kural": {
+    "secim": "genis",
+    "maxRange": 3,
+    "zone": "FVG",
+    "minGuven": "DUSUK",
+    "displacement": false,
+    "maxStop": 99,
+    "minStop": 0,
+    "klKalite": "AB",
+    "cikis": "2R"
+   },
+   "egitim": {
+    "islem": 62,
+    "isabet": 51.6,
+    "netR": 22.77,
+    "ortR": 0.367,
+    "skor": 1.92,
+    "pf": 1.65,
+    "maxDD": -9.93,
+    "long": 37,
+    "short": 25,
+    "coin": 31
+   },
+   "kontrol": {
+    "islem": 55,
+    "isabet": 30.9,
+    "netR": -17.35,
+    "ortR": -0.316,
+    "skor": -1.64,
+    "pf": 0.64,
+    "maxDD": -19.19,
+    "long": 26,
+    "short": 29,
+    "coin": 30
+   }
+  }
+ ],
+ "egitimdeKarliOran": 46.1
+}
