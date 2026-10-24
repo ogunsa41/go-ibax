@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: trading desk — verdict strip on top, agent pipeline, charts left / plan + checks right, agent detail cards below */
+/* Layout: trading desk — category chips, top-50 table, then the selected coin: verdict strip, agent pipeline, charts left / plan + checks right, agent cards */
 :root{
   --bg:#eef1f4; --panel:#ffffff; --ink:#18212b; --muted:#5d6b78; --line:#d6dde4;
   --accent:#b7791f; --bull:#0f8a6c; --bear:#c2453a; --warn:#b7791f; --skip:#8a96a3;
@@ -91,26 +91,50 @@ pre{margin:6px 0 0;background:var(--bg);border:1px solid var(--line);border-radi
 .note{font-size:.78rem;color:var(--muted)}
 .err{color:var(--bear)}
 .foot{font-size:.76rem;color:var(--muted);text-align:center}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.chip{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:grid;gap:2px;text-align:left;color:var(--ink);font-weight:400;cursor:pointer;border-left:4px solid var(--skip)}
+.chip .cnt{font-family:var(--f-display);font-size:1.4rem;font-weight:800;line-height:1.1}
+.chip .lb{font-size:.76rem;color:var(--muted)}
+.chip[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:-1px}
+.k-go{border-left-color:var(--bull)} .k-wait{border-left-color:var(--warn)} .k-no{border-left-color:var(--bear)}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.84rem}
+th{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+th.n{text-align:right}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--bg)}
+tr.sel td{background:var(--accent-soft)}
+.tag{display:inline-block;font-size:.74rem;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--bg);color:var(--muted)}
+.tag.go{background:var(--bull-soft);color:var(--bull)} .tag.wait{background:var(--accent-soft);color:var(--warn)} .tag.no{background:var(--bear-soft);color:var(--bear)}
+.sym{font-weight:600}
+.stale{color:var(--bear);font-weight:600}
 </style>
 
 <div class="wrap">
   <header>
     <div class="brand">
       <h1>CRT Trade Masası</h1>
-      <p>Haftalık bias → 4H key level → 4H CRT → 15m CHoCH → 15m giriş → kontrol</p>
+      <p>Binance top 50 · haftalık bias → 4H key level → 4H CRT → 15m CHoCH → 15m giriş → kontrol</p>
     </div>
-    <form class="controls" id="f">
-      <label class="lbl" for="sym">Sembol</label>
-      <input id="sym" list="syms" value="BTC_USDT" size="11" autocomplete="off">
-      <datalist id="syms"><option>BTC_USDT</option><option>ETH_USDT</option><option>SOL_USDT</option><option>XRP_USDT</option><option>BNB_USDT</option><option>DOGE_USDT</option></datalist>
-      <button id="run" type="submit">Analiz et</button>
-    </form>
+    <div class="note" id="meta">Tarama verisi bekleniyor…</div>
   </header>
 
+  <section class="summary" id="summary" aria-label="Kategori filtreleri"></section>
+
+  <section class="panel">
+    <div class="chart-head"><h2 id="listTitle">Top 50 tarama</h2><span class="note">Bir satıra tıklayın, detay aşağıda açılır.</span></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>#</th><th>Coin</th><th>Durum</th><th>Bias</th><th class="n">Fiyat</th><th class="n">Giriş</th><th class="n">Mesafe</th><th class="n">R:R</th><th>CRT</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+
   <section class="panel verdict" id="verdict">
-    <div class="big" id="vBig">YÜKLENİYOR</div>
-    <div class="why" id="vWhy">Ekip mum verisini çekiyor…</div>
-    <div class="meta" id="vMeta">Veri: Crypto.com</div>
+    <div class="big" id="vBig">—</div>
+    <div class="why" id="vWhy">Listeden bir coin seçin.</div>
+    <div class="meta" id="vMeta"></div>
   </section>
 
   <section class="pipe" id="pipe"></section>
@@ -129,7 +153,7 @@ pre{margin:6px 0 0;background:var(--bg);border:1px solid var(--line);border-radi
       </section>
     </div>
     <div class="stack">
-      <section class="panel" id="plan"><h2>İşlem planı</h2><p class="note">Analiz bekleniyor.</p></section>
+      <section class="panel" id="plan"><h2>İşlem planı</h2><p class="note">Coin seçilmedi.</p></section>
       <section class="panel"><div class="chart-head"><h2>Kontrolcü raporu</h2><span class="pill" id="qaPill"></span></div><ul class="checks" id="checks"></ul></section>
     </div>
   </div>
@@ -138,366 +162,196 @@ pre{margin:6px 0 0;background:var(--bg);border:1px solid var(--line);border-radi
 
   <section class="panel ask">
     <h2>Ekibe sor</h2>
-    <p class="note">Analiz hakkında soru sorun; sunucu ajanı yalnızca paneldeki verilerle cevaplar.</p>
+    <p class="note">Seçili coin ve tarama listesi hakkında soru sorun; cevap yalnızca paneldeki verilerle verilir.</p>
     <div class="ask-row">
-      <textarea id="q" placeholder="Örn: Risk %1 ve bakiye 1000 USDT ise pozisyon büyüklüğü ne olur?"></textarea>
+      <textarea id="q" placeholder="Örn: Hangi coinler girişe en yakın? Risk %1 ve bakiye 1000 USDT ise pozisyon ne olur?"></textarea>
       <button id="askBtn" type="button">Sor</button>
     </div>
     <div class="answer" id="ans"></div>
   </section>
 
-  <p class="foot">Kurallar ajan tanımlarıyla aynıdır (.claude/agents). Bu bir yatırım tavsiyesi değildir; kararlar ve risk size aittir.</p>
+  <p class="foot">Veri: Binance spot. Tarama her 15 dakikada Claude oturumu tarafından yapılır; kurallar .claude/skills/trade-ekibi/scanner.py içindedir. Bu bir yatırım tavsiyesi değildir; kararlar ve risk size aittir.</p>
 </div>
 
 <script>
 (() => {
-const SERVER_DEFAULT = "Crypto.com";
-const TF = { "7D": 7*864e5, "4h": 4*36e5, "15m": 9e5 };
 const $ = id => document.getElementById(id);
 const fmt = (x, d) => x == null || isNaN(x) ? "—" : Number(x).toLocaleString("en-US", { minimumFractionDigits: d ?? dp, maximumFractionDigits: d ?? dp });
 const fmtT = t => new Date(t).toISOString().slice(5, 16).replace("T", " ");
-let dp = 2, state = null, mcp = null, server = SERVER_DEFAULT;
+const dpOf = p => p >= 1000 ? 2 : p >= 1 ? 4 : p >= 0.01 ? 6 : 8;
+let dp = 2, ozet = null, detay = {}, secili = null, filtre = null, state = null;
 
-/* ---------- veri ---------- */
-function norm(payload, tf) {
-  const arr = Array.isArray(payload) ? payload : (payload?.data || payload?.result?.data || []);
-  const now = Date.now();
-  return arr.map(k => ({ t: Date.parse(k.timestamp), o: +k.open, h: +k.high, l: +k.low, c: +k.close }))
-    .filter(m => !isNaN(m.t)).sort((a, b) => a.t - b.t)
-    .map(m => ({ ...m, closed: m.t + TF[tf] <= now }));
+const TON = { FVG_BEKLENIYOR: "go", TETIKLENDI: "go", CHOCH_BEKLENIYOR: "wait", RR_YETERSIZ: "wait", BOLGE_GECILDI: "wait", CRT_BEKLENIYOR: "wait", HEDEFE_ULASTI: "", KL_YOK: "", NOTR: "", KONTROL_KALDI: "no", HATA: "no" };
+const KISA = { FVG_BEKLENIYOR: "FVG bekleniyor", TETIKLENDI: "Girişe değdi", CHOCH_BEKLENIYOR: "CHoCH bekleniyor", RR_YETERSIZ: "R:R yetersiz", BOLGE_GECILDI: "Bölge geçildi", CRT_BEKLENIYOR: "CRT bekleniyor", HEDEFE_ULASTI: "CRT hedefte", KL_YOK: "Key level yok", NOTR: "Bias nötr", KONTROL_KALDI: "Kontrol kaldı", HATA: "Veri hatası" };
+
+/* ---------- liste ---------- */
+function renderList() {
+  const coins = ozet.coinler;
+  const yas = (Date.now() - ozet.zaman) / 60000;
+  $("meta").replaceChildren(el("span", {}, `Son tarama ${new Date(ozet.zaman).toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" })} · ${coins.length} coin · ${ozet.sure} sn · `),
+    el("span", yas > 40 ? { class: "stale" } : {}, yas > 40 ? `${Math.round(yas)} dk önce, otomatik tarama durmuş olabilir` : `${Math.max(0, Math.round(yas))} dk önce`));
+  const say = {};
+  coins.forEach(c => { say[c.kat] = (say[c.kat] || 0) + 1; });
+  const sira = Object.keys(KISA).filter(k => say[k]);
+  $("summary").replaceChildren(
+    chip(null, "Tümü", coins.length, ""),
+    ...sira.map(k => chip(k, KISA[k], say[k], TON[k])));
+  const list = coins.filter(c => !filtre || c.kat === filtre).sort((a, b) => a.oncelik - b.oncelik || (a.girisMesafe ?? a.chochMesafe ?? 99) - (b.girisMesafe ?? b.chochMesafe ?? 99) || a.sira - b.sira);
+  $("listTitle").textContent = filtre ? `${KISA[filtre]} · ${list.length} coin` : "Top 50 tarama";
+  $("rows").replaceChildren(...list.map(c => {
+    const d = dpOf(c.fiyat || 1);
+    const mesafe = c.girisMesafe ?? c.chochMesafe;
+    const tr = el("tr", { class: "row" + (c.s === secili ? " sel" : ""), tabindex: "0", "data-s": c.s }, [
+      el("td", { class: "n" }, String(c.sira)),
+      el("td", { class: "sym" }, c.s.replace(/USDT$/, "")),
+      el("td", {}, el("span", { class: "tag " + (TON[c.kat] || "") }, c.etiket || KISA[c.kat])),
+      el("td", {}, c.bias ? el("span", { class: "dir " + (c.bias === "BULLISH" ? "long" : c.bias === "BEARISH" ? "short" : "none") }, c.bias === "BULLISH" ? "BULL" : c.bias === "BEARISH" ? "BEAR" : "NÖTR") : "—"),
+      el("td", { class: "n" }, fmt(c.fiyat, d)),
+      el("td", { class: "n" }, c.girisFiyat != null ? fmt(c.girisFiyat, d) : c.chochSeviye != null ? "CHoCH " + fmt(c.chochSeviye, d) : "—"),
+      el("td", { class: "n" }, mesafe != null ? "%" + mesafe.toFixed(2) : "—"),
+      el("td", { class: "n" }, c.rr2 != null ? c.rr2.toFixed(2) : "—"),
+      el("td", {}, c.crtTip ? `${c.crtTip} → ${fmt(c.hedef, d)}` : (c.crt || "—")),
+    ]);
+    tr.addEventListener("click", () => sec(c.s));
+    tr.addEventListener("keydown", e => { if (e.key === "Enter") sec(c.s); });
+    return tr;
+  }));
 }
-async function fetchTf(sym, tf) {
-  const r = await mcp.callTool(server, "get_candlestick", { instrument_name: sym, timeframe: tf }, { cache: { staleTime: 60000, gcTime: 300000 } });
-  let p = r.payload;
-  if (typeof p === "string") { try { p = JSON.parse(p); } catch { throw { code: "tool_error", message: p }; } }
-  const c = norm(p, tf);
-  if (!c.length) throw { code: "tool_error", message: `${sym} ${tf} için mum gelmedi` };
-  return c;
+function chip(k, lb, n, ton) {
+  const b = el("button", { type: "button", class: "chip " + (ton === "go" ? "k-go" : ton === "wait" ? "k-wait" : ton === "no" ? "k-no" : ""), "aria-pressed": String(filtre === k) }, [el("span", { class: "cnt" }, String(n)), el("span", { class: "lb" }, lb)]);
+  b.addEventListener("click", () => { filtre = k; renderList(); });
+  return b;
 }
-
-/* ---------- yardımcılar ---------- */
-const body = m => Math.abs(m.c - m.o);
-function swings(c, n, key) {
-  const out = [];
-  for (let i = n; i < c.length - n; i++) {
-    let ok = true;
-    for (let j = 1; j <= n && ok; j++) {
-      if (key === "h") ok = c[i].h > c[i - j].h && c[i].h > c[i + j].h;
-      else ok = c[i].l < c[i - j].l && c[i].l < c[i + j].l;
-    }
-    if (ok) out.push(i);
-  }
-  return out;
-}
-
-/* ---------- 1 · haftalık bias ---------- */
-function agentBias(W, price) {
-  const cw = W.filter(m => m.closed);
-  if (cw.length < 4) return { bias: "NEUTRAL", guven: "DUSUK", reasons: ["Yeterli kapanmış hafta yok"] };
-  const PW = cw.at(-1), PPW = cw.at(-2), reasons = [];
-  let beh = null;
-  const sl = PW.l < PPW.l, sh = PW.h > PPW.h;
-  if (PW.c > PPW.h) { beh = "BULLISH"; reasons.push(`Önceki hafta (PW) ${fmt(PW.c)} ile PPW high ${fmt(PPW.h)} üstünde kapandı`); }
-  else if (PW.c < PPW.l) { beh = "BEARISH"; reasons.push(`PW ${fmt(PW.c)} ile PPW low ${fmt(PPW.l)} altında kapandı`); }
-  else if (sl && !sh) { beh = "BULLISH"; reasons.push(`PW, PPW low'unu (${fmt(PPW.l)}) süpürüp içeride kapandı`); }
-  else if (sh && !sl) { beh = "BEARISH"; reasons.push(`PW, PPW high'ını (${fmt(PPW.h)}) süpürüp içeride kapandı`); }
-  else if (sh && sl) { beh = PW.c > (PW.h + PW.l) / 2 ? "BULLISH" : "BEARISH"; reasons.push(`PW iki ucu da süpürdü (dış hafta); kapanış aralığın ${beh === "BULLISH" ? "üst" : "alt"} yarısında`); }
-  else reasons.push("PW, PPW'nin içinde kaldı (inside week); yapıya bakıldı");
-
-  const last = cw.slice(-10), H = swings(last, 1, "h").map(i => last[i].h), L = swings(last, 1, "l").map(i => last[i].l);
-  let yapi = "KARISIK";
-  if (H.length >= 2 && L.length >= 2) {
-    if (H.at(-1) > H.at(-2) && L.at(-1) > L.at(-2)) yapi = "HH-HL";
-    else if (H.at(-1) < H.at(-2) && L.at(-1) < L.at(-2)) yapi = "LH-LL";
-  }
-  reasons.push(`Son 10 haftalık yapı: ${yapi}`);
-  const structDir = yapi === "HH-HL" ? "BULLISH" : yapi === "LH-LL" ? "BEARISH" : null;
-  const bias = beh || structDir || "NEUTRAL";
-
-  const rng = cw.slice(-12), hi = Math.max(...rng.map(m => m.h)), lo = Math.min(...rng.map(m => m.l)), eq = (hi + lo) / 2;
-  const konum = price < eq ? "DISCOUNT" : "PREMIUM";
-  reasons.push(`12 haftalık aralık ${fmt(lo)} – ${fmt(hi)}, equilibrium ${fmt(eq)}; fiyat ${konum}`);
-
-  let score = beh ? 1 : 0;
-  if (structDir === bias) score++;
-  if ((bias === "BULLISH" && konum === "DISCOUNT") || (bias === "BEARISH" && konum === "PREMIUM")) score++;
-  if (structDir && beh && structDir !== beh) score--;
-  const guven = score >= 3 ? "YUKSEK" : score === 2 ? "ORTA" : "DUSUK";
-
-  let hedef = null;
-  if (bias === "BULLISH") { const a = cw.map(m => m.h).filter(h => h > price); hedef = a.length ? Math.min(...a) : hi; }
-  if (bias === "BEARISH") { const a = cw.map(m => m.l).filter(l => l < price); hedef = a.length ? Math.max(...a) : lo; }
-  if (hedef) reasons.push(`Haftalık hedef (draw on liquidity): ${fmt(hedef)}`);
-  return { ajan: "haftalik-bias", bias, guven, yapi, equilibrium: eq, fiyat_konumu: konum, onceki_hafta: PW, haftalik_hedef: hedef,
-    gecersizlik: bias === "BULLISH" ? PW.l : bias === "BEARISH" ? PW.h : null, reasons };
+function sec(s) {
+  secili = s; renderList();
+  const c = ozet.coinler.find(x => x.s === s);
+  const d = detay["d" + c.parca]?.coinler?.[s];
+  if (!d) { setVerdict("no", "VERİ YOK", c.hata || "Bu coin'in detayı henüz yüklenmedi.", s); return; }
+  renderDetail(c, d);
+  $("verdict").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 }
 
-/* ---------- 2 · 4H key level ---------- */
-function agentKL(H4, W, bias, price) {
-  if (bias === "NEUTRAL") return { durum: "ATLANDI", seviyeler: [], reasons: ["Bias NEUTRAL"] };
-  const c = H4.filter(m => m.closed), bull = bias === "BULLISH", cand = [];
-  const avg = c.reduce((s, m) => s + body(m), 0) / c.length;
-  for (let i = 0; i + 2 < c.length; i++) {
-    const a = c[i], z = c[i + 2], later = c.slice(i + 3);
-    if (bull && a.h < z.l && !later.some(m => m.l <= a.h) && a.h <= price) cand.push({ tip: "FVG", alt: a.h, ust: z.l, t: c[i + 1].t });
-    if (!bull && a.l > z.h && !later.some(m => m.h >= a.l) && a.l >= price) cand.push({ tip: "FVG", alt: z.h, ust: a.l, t: c[i + 1].t });
-  }
-  for (let i = 0; i + 1 < c.length; i++) {
-    const a = c[i], n = c[i + 1], later = c.slice(i + 2);
-    if (bull && a.c < a.o && n.c > a.h && body(n) > 1.2 * avg && !later.some(m => m.c < a.l) && later.filter(m => m.l <= a.h).length < 2 && a.l <= price)
-      cand.push({ tip: "OB", alt: a.l, ust: a.h, t: a.t });
-    if (!bull && a.c > a.o && n.c < a.l && body(n) > 1.2 * avg && !later.some(m => m.c > a.h) && later.filter(m => m.h >= a.l).length < 2 && a.h >= price)
-      cand.push({ tip: "OB", alt: a.l, ust: a.h, t: a.t });
-  }
-  const pad = price * 0.0015;
-  if (bull) swings(c, 2, "l").forEach(i => { if (!c.slice(i + 1).some(m => m.l < c[i].l) && c[i].l < price) cand.push({ tip: "LIKIDITE", alt: c[i].l - pad, ust: c[i].l, t: c[i].t }); });
-  else swings(c, 2, "h").forEach(i => { if (!c.slice(i + 1).some(m => m.h > c[i].h) && c[i].h > price) cand.push({ tip: "LIKIDITE", alt: c[i].h, ust: c[i].h + pad, t: c[i].t }); });
-  const today = new Date(); today.setUTCHours(0, 0, 0, 0);
-  const pd = c.filter(m => m.t < today.getTime() && m.t >= today.getTime() - 864e5);
-  if (pd.length) {
-    if (bull) { const v = Math.min(...pd.map(m => m.l)); if (v < price) cand.push({ tip: "PDL", alt: v - pad, ust: v, t: pd[0].t }); }
-    else { const v = Math.max(...pd.map(m => m.h)); if (v > price) cand.push({ tip: "PDH", alt: v, ust: v + pad, t: pd[0].t }); }
-  }
-  const cw = W.filter(m => m.closed), PW = cw.at(-1);
-  if (PW) {
-    if (bull && PW.l < price) cand.push({ tip: "PWL", alt: PW.l - pad, ust: PW.l, t: PW.t });
-    if (!bull && PW.h > price) cand.push({ tip: "PWH", alt: PW.h, ust: PW.h + pad, t: PW.t });
-  }
-  cand.forEach(k => {
-    const ov = cand.filter(o => o !== k && o.tip !== k.tip && o.alt <= k.ust && o.ust >= k.alt).length;
-    k.kalite = ov >= 1 ? "A" : (k.tip === "FVG" || k.tip === "OB") ? "B" : "C";
-    k.mesafe = price >= k.alt && price <= k.ust ? 0 : Math.min(Math.abs(price - k.alt), Math.abs(price - k.ust));
-  });
-  const kept = cand.filter(k => k.kalite !== "C" || cand.length <= 4).sort((a, b) => a.mesafe - b.mesafe).slice(0, 4);
-  kept.forEach((k, i) => k.id = "KL" + (i + 1));
-  return { durum: kept.length ? "TAMAM" : "YOK", seviyeler: kept,
-    reasons: kept.length ? kept.map(k => `${k.id} ${k.tip} ${fmt(k.alt)} – ${fmt(k.ust)} (kalite ${k.kalite})`) : [`Fiyatın ${bull ? "altında" : "üstünde"} geçerli seviye bulunamadı`] };
-}
-
-/* ---------- 3 · 4H CRT (2 / 3 / çok mumlu) ---------- */
-function crtScan(H4, yon, maxR = 6, maxS = 3, sonN = 12) {
-  const k = H4.filter(m => m.closed), out = [];
-  for (let b = 0; b < k.length; b++) for (let r = 1; r <= maxR; r++) {
-    const re = b + r - 1; if (re >= k.length) break;
-    const rng = k.slice(b, re + 1), rH = Math.max(...rng.map(m => m.h)), rL = Math.min(...rng.map(m => m.l));
-    for (let s = 1; s <= maxS; s++) {
-      const se = re + s; if (se >= k.length) break;
-      if (se < k.length - sonN) continue;
-      const sw = k.slice(re + 1, se + 1), last = sw.at(-1), inside = last.c > rL && last.c < rH;
-      let uc, hedef;
-      if (yon === "BULLISH") { if (!(sw[0].l < rL && inside && sw.slice(0, -1).every(m => m.c <= rL))) continue; uc = Math.min(...sw.map(m => m.l)); hedef = rH; }
-      else { if (!(sw[0].h > rH && inside && sw.slice(0, -1).every(m => m.c >= rH))) continue; uc = Math.max(...sw.map(m => m.h)); hedef = rL; }
-      const after = k.slice(se + 1);
-      let durum = "AKTIF";
-      if (after.some(m => yon === "BULLISH" ? m.c < uc : m.c > uc)) durum = "GECERSIZ";
-      else if (after.some(m => yon === "BULLISH" ? m.h >= hedef : m.l <= hedef)) durum = "HEDEFE_ULASTI";
-      out.push({ yon, tip: r + s <= 3 ? `${r + s}-mum` : "cok-mum", rN: r, sN: s, rStart: rng[0].t, rEnd: rng.at(-1).t, rH, rL,
-        sStart: sw[0].t, sEnd: last.t, swHi: Math.max(...sw.map(m => m.h)), swLo: Math.min(...sw.map(m => m.l)), sweep: uc, hedef, durum });
-    }
-  }
-  return out;
-}
-function agentCRT(H4, bias, kl) {
-  if (bias === "NEUTRAL" || !kl.seviyeler.length) return { durum: "ATLANDI", liste: [], reasons: ["Önceki adım sonuç vermedi"] };
-  const all = crtScan(H4, bias);
-  all.forEach(x => { const z = kl.seviyeler.find(s => x.swLo <= s.ust && x.swHi >= s.alt && (bias === "BULLISH" ? x.sweep <= s.ust : x.sweep >= s.alt)); x.kl = z ? z.id : null; });
-  const withKL = all.filter(x => x.kl && x.durum !== "GECERSIZ");
-  const bySweep = new Map();
-  withKL.forEach(x => { const key = x.sEnd; const p = bySweep.get(key); if (!p || x.rN > p.rN) bySweep.set(key, x); });
-  const rank = { AKTIF: 0, HEDEFE_ULASTI: 1 };
-  const liste = [...bySweep.values()].sort((a, b) => rank[a.durum] - rank[b.durum] || b.sEnd - a.sEnd).slice(0, 3);
-  liste.forEach((x, i) => x.id = "CRT" + (i + 1));
-  const aktif = liste.find(x => x.durum === "AKTIF");
-  const reasons = liste.length ? liste.map(x => `${x.id} ${x.tip} · range ${fmt(x.rL)} – ${fmt(x.rH)} · sweep ${fmt(x.sweep)} (${x.kl}) · hedef ${fmt(x.hedef)} · ${x.durum}`)
-    : [`Son 12 mumda key level'a değen ${bias === "BULLISH" ? "bullish" : "bearish"} CRT yok (${all.length} aday KL dışında veya geçersiz)`];
-  return { durum: aktif ? "AKTIF" : liste.length ? "HEDEFE_ULASTI" : "YOK", liste, aktif, adaySayisi: all.length, reasons };
-}
-
-/* ---------- 4 · 15m CHoCH ---------- */
-function agentChoch(M, crt) {
-  if (!crt.aktif) return { durum: "ATLANDI", reasons: ["Aktif CRT yok"] };
-  const x = crt.aktif, c = M.filter(m => m.closed), bull = x.yon === "BULLISH";
-  const t0 = x.sStart, t1 = x.sEnd + TF["4h"];
-  const win = c.map((m, i) => i).filter(i => c[i].t >= t0 && c[i].t < t1);
-  if (!win.length) return { durum: "VERI_YOK", reasons: [`15m verisi (${c.length} mum, ${fmtT(c[0].t)} sonrası) CRT sweep fazını (${fmtT(t0)}) kapsamıyor`] };
-  const sp = win.reduce((a, i) => bull ? (c[i].l < c[a].l ? i : a) : (c[i].h > c[a].h ? i : a), win[0]);
-  const piv = swings(c, 2, bull ? "h" : "l").filter(i => i < sp);
-  let lvlIdx = piv.at(-1);
-  if (lvlIdx == null) {
-    const pre = c.slice(Math.max(0, sp - 8), sp).map((m, j) => j + Math.max(0, sp - 8));
-    if (!pre.length) return { durum: "VERI_YOK", reasons: ["Sweep noktası 15m penceresinin başında; kırılım seviyesi belirlenemedi"] };
-    lvlIdx = pre.reduce((a, i) => bull ? (c[i].h > c[a].h ? i : a) : (c[i].l < c[a].l ? i : a), pre[0]);
-  }
-  const lvl = bull ? c[lvlIdx].h : c[lvlIdx].l;
-  const brk = c.findIndex((m, i) => i > sp && (bull ? m.c > lvl : m.c < lvl));
-  const avg = c.reduce((s, m) => s + body(m), 0) / c.length;
-  const res = { yon: x.yon, sp, spT: c[sp].t, spPrice: bull ? c[sp].l : c[sp].h, lvlIdx, lvl, lvlT: c[lvlIdx].t, c };
-  if (brk < 0) return { ...res, durum: "BEKLENIYOR", reasons: [`Sweep noktası ${fmt(res.spPrice)} (${fmtT(res.spT)})`, `${fmt(lvl)} ${bull ? "üstünde" : "altında"} 15m gövde kapanışı bekleniyor`] };
-  return { ...res, durum: "ONAYLANDI", brk, brkT: c[brk].t, brkC: c[brk].c, displacement: body(c[brk]) > 1.5 * avg,
-    reasons: [`Sweep noktası ${fmt(res.spPrice)} (${fmtT(res.spT)})`, `CHoCH seviyesi ${fmt(lvl)} (${fmtT(res.lvlT)})`, `Kırılım: ${fmtT(c[brk].t)} mumu ${fmt(c[brk].c)} ile gövde kapanışı`, body(c[brk]) > 1.5 * avg ? "Güçlü displacement" : "Kırılım mumu ortalama güçte"] };
-}
-
-/* ---------- 5 · 15m giriş ---------- */
-function agentEntry(ch, crt, bias, price) {
-  if (ch.durum !== "ONAYLANDI") return { durum: "BEKLE", reasons: [ch.durum === "BEKLENIYOR" ? "CHoCH onayı bekleniyor" : "CHoCH yok"] };
-  const c = ch.c, bull = ch.yon === "BULLISH", x = crt.aktif;
-  let z = null;
-  for (let i = ch.sp; i + 2 <= Math.min(ch.brk + 1, c.length - 1); i++) {
-    const a = c[i], d = c[i + 2];
-    if (bull && a.h < d.l) z = { tip: "FVG", alt: a.h, ust: d.l, idx: i + 2, t: c[i + 1].t };
-    if (!bull && a.l > d.h) z = { tip: "FVG", alt: d.h, ust: a.l, idx: i + 2, t: c[i + 1].t };
-  }
-  if (!z) for (let i = ch.brk - 1; i >= ch.sp; i--) {
-    const m = c[i];
-    if (bull ? m.c < m.o : m.c > m.o) { z = { tip: "OB", alt: m.l, ust: m.h, idx: i, t: m.t }; break; }
-  }
-  if (!z) return { durum: "BEKLE", reasons: ["Displacement bacağında FVG veya OB yok"] };
-  const after = c.slice(z.idx + 1);
-  if (after.some(m => bull ? m.c < z.alt : m.c > z.ust)) return { durum: "BEKLE", zone: z, reasons: [`${z.tip} bölgesi kapanışla geçildi, plan iptal`] };
-  const giris = bull ? z.ust : z.alt;
-  const spC = c[ch.sp], buf = Math.max(0.1 * (spC.h - spC.l), price * 0.0005);
-  const sl = bull ? Math.min(ch.spPrice, x.sweep) - buf : Math.max(ch.spPrice, x.sweep) + buf;
-  const sw = swings(c, 2, bull ? "h" : "l").map(i => bull ? c[i].h : c[i].l).filter(v => bull ? v > giris : v < giris);
-  let tp1 = sw.length ? (bull ? Math.min(...sw) : Math.max(...sw)) : (bull ? c[ch.brk].h : c[ch.brk].l);
-  const tp2 = x.hedef, tp3 = bias.haftalik_hedef;
-  if (bull ? tp1 >= tp2 : tp1 <= tp2) tp1 = null;
-  const risk = Math.abs(giris - sl), rr = v => v == null ? null : Math.abs(v - giris) / risk;
-  const tps = [
-    tp1 != null && { ad: "TP1", seviye: tp1, rr: rr(tp1), aciklama: "15m karşı likidite" },
-    { ad: "TP2", seviye: tp2, rr: rr(tp2), aciklama: "CRT hedefi" },
-    tp3 != null && (bull ? tp3 > tp2 : tp3 < tp2) && { ad: "TP3", seviye: tp3, rr: rr(tp3), aciklama: "Haftalık hedef" },
-  ].filter(Boolean);
-  const touched = after.some(m => bull ? m.l <= giris : m.h >= giris);
-  const durum = rr(tp2) < 2 ? "RR_YETERSIZ" : "HAZIR";
-  return { durum, yon: bull ? "LONG" : "SHORT", zone: z, giris, sl, tps, touched,
-    reasons: [`${z.tip} ${fmt(z.alt)} – ${fmt(z.ust)} (${fmtT(z.t)})`, `Giriş bölgenin ilk değilen kenarı: ${fmt(giris)} (${bull ? "üst" : "alt"} kenar)`, `Stop ${fmt(sl)} · TP2 R:R ${rr(tp2).toFixed(2)}`, touched ? "Fiyat giriş seviyesine değdi (emir tetiklenmiş olabilir)" : "Fiyat henüz giriş seviyesine dönmedi"] };
-}
-
-/* ---------- 6 · kontrolcü ---------- */
-function agentQA(d) {
-  const L = [], add = (k, s, det) => L.push({ k, s, det });
-  const { W, H4, M, bias, kl, crt, ch, en, price } = d;
-  add("Kapanmamış mum kullanılmadı", "GECTI", "Tüm kararlar yalnızca kapanmış mumlardan; güncel fiyat hariç");
-  if (bias.bias === "NEUTRAL") { add("Bias NEUTRAL → zincir durdu", "GECTI", "Sonraki adımlar atlandı"); return fin(L); }
-  const cw = W.filter(m => m.closed), PW = cw.at(-1), PPW = cw.at(-2);
-  const bOk = (bias.bias === "BULLISH" && (PW.c > PPW.h || PW.l < PPW.l || bias.yapi === "HH-HL")) || (bias.bias === "BEARISH" && (PW.c < PPW.l || PW.h > PPW.h || bias.yapi === "LH-LL"));
-  add("Haftalık bias ham veriyle tutarlı", bOk ? "GECTI" : "KALDI", `PW O/H/L/C ${fmt(PW.o)}/${fmt(PW.h)}/${fmt(PW.l)}/${fmt(PW.c)}`);
-  if (bias.guven === "DUSUK") add("Bias güveni", "UYARI", "Kurallar kısmen çelişiyor; pozisyon küçültün");
-  const bull = bias.bias === "BULLISH";
-  const side = kl.seviyeler.every(s => bull ? s.alt <= price : s.ust >= price);
-  add("Key level'lar bias tarafında", kl.seviyeler.length ? (side ? "GECTI" : "KALDI") : "ATLANDI", kl.seviyeler.length ? `${kl.seviyeler.length} seviye, hepsi fiyatın ${bull ? "altında/içinde" : "üstünde/içinde"}` : "Seviye yok");
-  if (!crt.aktif) { add("Aktif CRT", crt.liste?.length ? "UYARI" : "ATLANDI", crt.liste?.length ? "CRT'ler hedefe ulaşmış; giriş yok" : "Uygun CRT yok"); return fin(L); }
-  const x = crt.aktif, k = H4.filter(m => m.closed), rng = k.filter(m => m.t >= x.rStart && m.t <= x.rEnd), sw = k.filter(m => m.t >= x.sStart && m.t <= x.sEnd);
-  const rH = Math.max(...rng.map(m => m.h)), rL = Math.min(...rng.map(m => m.l));
-  const crtOk = Math.abs(rH - x.rH) < 1e-9 && Math.abs(rL - x.rL) < 1e-9 && (bull ? sw[0].l < rL : sw[0].h > rH) && sw.at(-1).c > rL && sw.at(-1).c < rH;
-  add("CRT ham 4H veriyle yeniden doğrulandı", crtOk ? "GECTI" : "KALDI", `${x.tip}: range ${rng.length} mum, sweep ${sw.length} mum, son sweep kapanışı ${fmt(sw.at(-1).c)} range içinde`);
-  add("CRT yönü = bias", x.yon === bias.bias ? "GECTI" : "KALDI", x.yon);
-  const z = kl.seviyeler.find(s => s.id === x.kl);
-  add("CRT sweep'i key level'a değiyor", z && x.swLo <= z.ust && x.swHi >= z.alt ? "GECTI" : "KALDI", z ? `${x.kl} ${fmt(z.alt)} – ${fmt(z.ust)}, sweep ${fmt(x.sweep)}` : "KL yok");
-  if (ch.durum !== "ONAYLANDI") { add("15m CHoCH", ch.durum === "BEKLENIYOR" ? "UYARI" : "ATLANDI", ch.reasons.at(-1)); return fin(L); }
-  const bc = ch.c[ch.brk];
-  add("CHoCH gövde kapanışı", (bull ? bc.c > ch.lvl : bc.c < ch.lvl) ? "GECTI" : "KALDI", `Kapanış ${fmt(bc.c)} vs seviye ${fmt(ch.lvl)}`);
-  const order = x.rEnd < x.sStart && ch.spT >= x.sStart && ch.brkT > ch.spT && (!en.zone || en.zone.t >= ch.spT);
-  add("Zaman sırası", order ? "GECTI" : "KALDI", "range < sweep ≤ 15m sweep < CHoCH ≤ giriş yapısı");
-  if (!en.giris) { add("Giriş planı", "ATLANDI", en.reasons[0]); return fin(L); }
-  add("Giriş bölgenin değdiği kenarda", en.giris === (bull ? en.zone.ust : en.zone.alt) ? "GECTI" : "KALDI", `${en.zone.tip} ${bull ? "üst" : "alt"} kenar ${fmt(en.giris)}`);
-  const tps = en.tps.map(t => t.seviye), seq = [en.sl, en.giris, ...tps];
-  const sorted = seq.every((v, i) => i === 0 || (bull ? v > seq[i - 1] : v < seq[i - 1]));
-  add("SL / giriş / TP sıralaması", sorted ? "GECTI" : "KALDI", seq.map(v => fmt(v)).join(bull ? " < " : " > "));
-  add("SL sweep noktasının ötesinde", (bull ? en.sl < Math.min(ch.spPrice, x.sweep) : en.sl > Math.max(ch.spPrice, x.sweep)) ? "GECTI" : "KALDI", `SL ${fmt(en.sl)}, sweep ${fmt(bull ? Math.min(ch.spPrice, x.sweep) : Math.max(ch.spPrice, x.sweep))}`);
-  const tp2 = en.tps.find(t => t.ad === "TP2"), rr2 = Math.abs(tp2.seviye - en.giris) / Math.abs(en.giris - en.sl);
-  add("TP2 R:R ≥ 2", rr2 >= 2 ? "GECTI" : "KALDI", `Yeniden hesap: ${rr2.toFixed(2)}`);
-  return fin(L);
-  function fin(L) { const g = L.some(c => c.s === "KALDI") ? "KALDI" : L.some(c => c.s === "UYARI") ? "UYARI" : "GECTI"; return { genel: g, list: L }; }
-}
-
-/* ---------- çalıştır ---------- */
-async function run(sym) {
-  setVerdict("wait", "ANALİZ", "Ekip mumları çekiyor ve kuralları uyguluyor…", "");
-  $("run").disabled = true;
-  try {
-    const [W, H4, M] = await Promise.all([fetchTf(sym, "7D"), fetchTf(sym, "4h"), fetchTf(sym, "15m")]);
-    const price = M.at(-1).c;
-    dp = price >= 1000 ? 2 : price >= 1 ? 4 : 6;
-    const bias = agentBias(W, price);
-    const kl = agentKL(H4, W, bias.bias, price);
-    const crt = agentCRT(H4, bias.bias, kl);
-    const ch = agentChoch(M, crt);
-    const en = agentEntry(ch, crt, bias, price);
-    const qa = agentQA({ W, H4, M, bias, kl, crt, ch, en, price });
-    state = { sym, W, H4, M, price, bias, kl, crt, ch, en, qa, at: Date.now() };
-    render();
-  } catch (e) { showError(e); }
-  $("run").disabled = false;
-}
-
-/* ---------- 7 · sunucu (görünüm) ---------- */
+/* ---------- detay ---------- */
 function setVerdict(cls, big, why, meta) {
-  const v = $("verdict"); v.className = "panel verdict " + cls;
-  $("vBig").textContent = big; $("vWhy").textContent = why; if (meta != null) $("vMeta").textContent = meta;
+  $("verdict").className = "panel verdict " + cls;
+  $("vBig").textContent = big; $("vWhy").textContent = why; $("vMeta").textContent = meta || "";
 }
-const stClass = s => ({ GECTI: "p-ok", KALDI: "p-fail", UYARI: "p-warn", ATLANDI: "p-skip" }[s]);
-function render() {
-  const s = state, { bias, kl, crt, ch, en, qa } = s;
-  let cls, big, why;
-  if (qa.genel === "KALDI") { cls = "no"; big = "İŞLEM YOK"; why = "Kontrolcü hatalı adım buldu; plan gösterilmiyor."; }
-  else if (en.durum === "HAZIR") { cls = "go"; big = "İŞLEM HAZIR"; why = `${en.yon} · giriş ${fmt(en.giris)} · stop ${fmt(en.sl)} · TP2 ${fmt(en.tps.find(t => t.ad === "TP2").seviye)}`; }
-  else if (bias.bias === "NEUTRAL") { cls = "no"; big = "İŞLEM YOK"; why = "Haftalık bias net değil (NEUTRAL)."; }
-  else if (!kl.seviyeler.length || crt.durum === "YOK") { cls = "no"; big = "İŞLEM YOK"; why = (crt.reasons || kl.reasons)[0]; }
-  else if (!crt.aktif) { cls = "wait"; big = "BEKLE"; why = "Bulunan CRT'ler hedefine ulaşmış; yeni CRT yapısı bekleniyor."; }
-  else { cls = "wait"; big = "BEKLE"; why = en.durum === "RR_YETERSIZ" ? "R:R 2'nin altında." : (ch.durum !== "ONAYLANDI" ? ch.reasons.at(-1) : en.reasons[0]) || crt.reasons[0]; }
-  setVerdict(cls, big, why, `${s.sym} · ${fmt(s.price)} · ${new Date(s.at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })} · Veri: Crypto.com`);
+const stClass = s => ({ GECTI: "p-ok", KALDI: "p-fail", UYARI: "p-warn", ATLANDI: "p-skip" }[s] || "p-skip");
+const toC = a => (a || []).map(([t, o, h, l, c]) => ({ t, o, h, l, c, closed: true }));
+function renderDetail(c, d) {
+  dp = dpOf(c.fiyat || 1);
+  const { bias, kl, crt, ch, en, qa } = d;
+  const aktif = (crt.liste || []).find(x => x.id === d.aktifId) || null;
+  const ton = TON[c.kat];
+  let why = c.etiket;
+  if (c.kat === "FVG_BEKLENIYOR" || c.kat === "TETIKLENDI") why = `${en.yon} · giriş ${fmt(en.giris)} · stop ${fmt(en.sl)} · TP2 ${fmt(en.tps.find(t => t.ad === "TP2").seviye)}`;
+  else if (c.kat === "CHOCH_BEKLENIYOR") why = `${fmt(ch.lvl)} ${ch.yon === "BULLISH" ? "üstünde" : "altında"} 15m gövde kapanışı bekleniyor`;
+  else if (c.kat === "CRT_BEKLENIYOR") why = `Bias ${bias.bias}; key level'lara değen aktif CRT yok`;
+  setVerdict(ton === "go" ? "go" : ton === "wait" ? "wait" : "no", KISA[c.kat].toLocaleUpperCase("tr-TR"), why, `${c.s} · ${fmt(c.fiyat)} · Binance`);
 
   const steps = [
     ["Haftalık bias", bias.bias + (bias.bias !== "NEUTRAL" ? " · " + bias.guven : ""), bias.bias === "NEUTRAL" ? "fail" : "ok"],
-    ["4H key level", kl.durum === "ATLANDI" ? "ATLANDI" : kl.seviyeler.length + " seviye", kl.durum === "ATLANDI" ? "skip" : kl.seviyeler.length ? "ok" : "fail"],
+    ["4H key level", kl.durum === "ATLANDI" ? "ATLANDI" : (kl.seviyeler || []).length + " seviye", kl.durum === "ATLANDI" ? "skip" : (kl.seviyeler || []).length ? "ok" : "fail"],
     ["4H CRT", crt.durum, crt.durum === "AKTIF" ? "ok" : crt.durum === "ATLANDI" ? "skip" : crt.durum === "HEDEFE_ULASTI" ? "wait" : "fail"],
     ["15m CHoCH", ch.durum, ch.durum === "ONAYLANDI" ? "ok" : ch.durum === "ATLANDI" ? "skip" : ch.durum === "BEKLENIYOR" ? "wait" : "fail"],
-    ["15m giriş", en.durum, en.durum === "HAZIR" ? "ok" : en.durum === "RR_YETERSIZ" ? "fail" : ch.durum === "ONAYLANDI" ? "wait" : "skip"],
+    ["15m giriş", en.durum, en.durum === "HAZIR" ? "ok" : en.durum === "RR_YETERSIZ" || en.durum === "BOLGE_GECILDI" ? "fail" : ch.durum === "ONAYLANDI" ? "wait" : "skip"],
     ["Kontrolcü", qa.genel, qa.genel === "GECTI" ? "ok" : qa.genel === "UYARI" ? "wait" : "fail"],
-    ["Sunucu", big, cls === "go" ? "ok" : cls === "wait" ? "wait" : "fail"],
+    ["Sunucu", KISA[c.kat], ton === "go" ? "ok" : ton === "wait" ? "wait" : ton === "no" ? "fail" : "skip"],
   ];
-  $("pipe").replaceChildren(...steps.map(([t, st, c], i) => el("div", { class: "step st-" + c }, [el("span", { class: "n" }, `0${i + 1}`), el("span", { class: "t" }, t), el("span", { class: "s" }, st)])));
+  $("pipe").replaceChildren(...steps.map(([t, st, k], i) => el("div", { class: "step st-" + k }, [el("span", { class: "n" }, `0${i + 1}`), el("span", { class: "t" }, t), el("span", { class: "s" }, st)])));
 
-  // plan
   const p = $("plan"); p.replaceChildren(el("h2", {}, "İşlem planı"));
-  if (en.giris && qa.genel !== "KALDI") {
+  if (en.giris != null && qa.genel !== "KALDI") {
     const g = el("div", { class: "plan-grid" });
-    const row = (k, v, r, color) => { g.append(el("span", { class: "k" }, k), el("span", { class: "v", style: color ? `color:var(${color})` : "" }, fmt(v)), el("span", { class: "r" }, r || "")); };
+    const row = (k, v, r, color) => g.append(el("span", { class: "k" }, k), el("span", { class: "v", style: color ? `color:var(${color})` : "" }, fmt(v)), el("span", { class: "r" }, r || ""));
     row("Giriş (limit)", en.giris, en.zone.tip + " kenarı", "--accent");
     row("Stop-loss", en.sl, "%" + (Math.abs(en.giris - en.sl) / en.giris * 100).toFixed(2), "--bear");
     en.tps.forEach(t => row(`${t.ad} · ${t.aciklama}`, t.seviye, "R:R " + t.rr.toFixed(2), "--bull"));
-    p.append(el("div", { style: "display:flex;gap:8px;align-items:center;margin:8px 0 12px;flex-wrap:wrap" }, [el("span", { class: "dir " + (en.yon === "LONG" ? "long" : "short") }, en.yon), el("span", { class: "note" }, en.durum === "HAZIR" ? (en.touched ? "Fiyat girişe değdi" : "Limit emir bekliyor") : "R:R yetersiz")]), g,
-      el("p", { class: "note", style: "margin:12px 0 0" }, `İptal: fiyat ${en.zone.tip} bölgesini ${en.yon === "LONG" ? "altından" : "üstünden"} kapanışla geçerse veya 4H mum ${fmt(crt.aktif.sweep)} ${en.yon === "LONG" ? "altında" : "üstünde"} kapanırsa.`));
-  } else p.append(el("p", { class: "note" }, qa.genel === "KALDI" ? "Kontrol başarısız olduğu için plan gösterilmiyor." : `Şu an işlem planı yok. ${why}`));
+    p.append(el("div", { style: "display:flex;gap:8px;align-items:center;margin:8px 0 12px;flex-wrap:wrap" }, [el("span", { class: "dir " + (en.yon === "LONG" ? "long" : "short") }, en.yon), el("span", { class: "note" }, en.durum === "HAZIR" ? (en.touched ? "Fiyat girişe değdi" : "Limit emir: fiyatın bölgeye dönmesi bekleniyor") : "R:R yetersiz, işlem önerilmiyor")]), g,
+      el("p", { class: "note", style: "margin:12px 0 0" }, `İptal: fiyat ${en.zone.tip} bölgesini ${en.yon === "LONG" ? "altından" : "üstünden"} kapanışla geçerse veya 4H mum ${fmt(aktif?.sweep)} ${en.yon === "LONG" ? "altında" : "üstünde"} kapanırsa.`));
+  } else p.append(el("p", { class: "note" }, `Şu an işlem planı yok. ${why}`));
 
-  // checks
   $("qaPill").textContent = qa.genel; $("qaPill").className = "pill " + stClass(qa.genel); $("qaPill").style.padding = "1px 8px";
-  $("checks").replaceChildren(...qa.list.map(c => el("li", {}, [el("span", { class: "pill " + stClass(c.s) }, c.s), el("span", {}, [c.k, el("span", { class: "d" }, c.det || "")])])));
+  $("checks").replaceChildren(...qa.list.map(x => el("li", {}, [el("span", { class: "pill " + stClass(x.s) }, x.s), el("span", {}, [x.k, el("span", { class: "d" }, x.d || "")])])));
 
-  // cards
-  const strip = o => JSON.parse(JSON.stringify(o, (k, v) => (k === "c" || k === "reasons") ? undefined : v));
-  const card = (n, t, st, r, json) => el("article", { class: "panel card" }, [el("div", { class: "head" }, [el("h3", {}, `${n} · ${t}`), el("span", { class: "dir " + (/(BULL|LONG)/.test(st) ? "long" : /(BEAR|SHORT)/.test(st) ? "short" : "none") }, st)]), el("ul", {}, (r || []).map(x => el("li", {}, x))), el("details", {}, [el("summary", {}, "Ham çıktı (JSON)"), el("pre", {}, JSON.stringify(strip(json), null, 1))])]);
+  const klR = (kl.seviyeler || []).map(s => `${s.id} ${s.tip} ${fmt(s.alt)} – ${fmt(s.ust)} (kalite ${s.kalite})`);
+  const crtR = (crt.liste || []).map(x => `${x.id} ${x.tip} · range ${fmt(x.rL)} – ${fmt(x.rH)} · sweep ${fmt(x.sweep)} (${x.kl}) · hedef ${fmt(x.hedef)} · ${x.durum}`);
+  const chR = ch.durum === "ATLANDI" ? ["Aktif CRT yok"] : ch.lvl == null ? ["15m verisi yetersiz"] : [`Sweep noktası ${fmt(ch.spPrice)} (${fmtT(ch.spT)})`, `CHoCH seviyesi ${fmt(ch.lvl)} (${fmtT(ch.lvlT)})`,
+    ch.durum === "ONAYLANDI" ? `Kırılım ${fmtT(ch.brkT)} · kapanış ${fmt(ch.brkC)}${ch.displacement ? " · güçlü displacement" : ""}` : `Sweep sonrası en yakın kapanış ${fmt(ch.enYakinKapanis)}`];
+  const enR = en.giris != null ? [`${en.zone.tip} ${fmt(en.zone.alt)} – ${fmt(en.zone.ust)} (${fmtT(en.zone.t)})`, `Giriş bölgenin ilk değilen kenarı: ${fmt(en.giris)}`, `Stop ${fmt(en.sl)}`] : en.zone ? [`${en.zone.tip} ${fmt(en.zone.alt)} – ${fmt(en.zone.ust)} kapanışla geçildi`] : [en.neden || "CHoCH onayı bekleniyor"];
+  const card = (n, t, st, r, json) => el("article", { class: "panel card" }, [el("div", { class: "head" }, [el("h3", {}, `${n} · ${t}`), el("span", { class: "dir " + (/(BULL|LONG)/.test(st) ? "long" : /(BEAR|SHORT)/.test(st) ? "short" : "none") }, st)]), el("ul", {}, r.map(x => el("li", {}, x))), el("details", {}, [el("summary", {}, "Ham çıktı (JSON)"), el("pre", {}, JSON.stringify(json, null, 1))])]);
   $("cards").replaceChildren(
-    card("01", "Haftalık bias", bias.bias, bias.reasons, bias),
-    card("02", "4H key level", kl.durum, kl.reasons, kl),
-    card("03", "4H CRT", crt.durum, crt.reasons, { durum: crt.durum, liste: crt.liste, adaySayisi: crt.adaySayisi }),
-    card("04", "15m CHoCH", ch.durum, ch.reasons, ch),
-    card("05", "15m giriş", en.durum, en.reasons, en));
+    card("01", "Haftalık bias", bias.bias, [...(bias.neden || []), bias.hedef != null ? `Haftalık hedef ${fmt(bias.hedef)}` : ""].filter(Boolean), bias),
+    card("02", "4H key level", kl.durum, klR.length ? klR : ["Seviye yok"], kl),
+    card("03", "4H CRT", crt.durum, crtR.length ? crtR : ["Key level'a değen CRT yok"], crt),
+    card("04", "15m CHoCH", ch.durum, chR, ch),
+    card("05", "15m giriş", en.durum, enR, en));
+
+  state = { c, d, aktif, H4: toC(d.m4), M: toC(d.m15) };
   drawAll();
 }
-function showError(e) {
-  const code = e?.code;
-  const msg = {
-    server_not_connected: `${server} bağlayıcısı bulunamadı. claude.ai → Ayarlar → Bağlayıcılar'dan ekleyin.`,
-    needs_reauth: `${server} bağlantısı yenilenmeli. claude.ai → Ayarlar → Bağlayıcılar'dan yeniden bağlayın.`,
-    not_in_manifest: "Bu panelin mum verisi okumasına izin verilmedi. Sayfanın izinlerinden Crypto.com'u açın.",
-    approval_required: "Veri çekmek için onayınız gerekiyor. 'Analiz et'e tekrar basın ve izin verin.",
-    server_unavailable: "Crypto.com şu an cevap vermiyor. Biraz sonra 'Analiz et'e tekrar basın.",
-    tool_error: "Crypto.com bu sembol için veri döndürmedi. Sembolü kontrol edin (ör. BTC_USDT): " + (e?.message || ""),
-  }[code] || "Veri alınamadı: " + (e?.message || code || e);
-  setVerdict("no", "VERİ YOK", msg, "Veri: Crypto.com");
+function drawAll() {
+  if (!state) return;
+  const { d, aktif, H4, M } = state, { bias, kl, ch, en, qa } = d;
+  if (!H4.length) { [$("c4h"), $("c15")].forEach(cv => cv.getContext("2d").clearRect(0, 0, cv.width, cv.height)); return; }
+  const price = state.c.fiyat;
+  const zones4 = (kl.seviyeler || []).map(s => ({ a: s.alt, b: s.ust, t: s.t, fill: "--accent-soft", stroke: "--accent", label: `${s.id} ${s.tip}` }));
+  const lines4 = [{ y: price, color: "--ink", label: "", dash: true }];
+  if (aktif) {
+    zones4.push({ a: aktif.rL, b: aktif.rH, t: aktif.rStart, t1: aktif.sEnd, fill: "--bull-soft", stroke: "--skip", label: aktif.id + " " + aktif.tip, dash: true });
+    lines4.push({ y: aktif.hedef, color: "--accent", label: "HEDEF", t: aktif.rStart });
+  }
+  const lo4 = Math.min(...H4.map(m => m.l)), hi4 = Math.max(...H4.map(m => m.h));
+  drawChart($("c4h"), H4, { zones: zones4.filter(z => z.b >= lo4 * 0.97 && z.a <= hi4 * 1.03), lines: lines4,
+    marks: aktif ? [{ t: aktif.sEnd, y: aktif.sweep, color: bias.bias === "BULLISH" ? "--bull" : "--bear", label: "sweep", below: bias.bias === "BULLISH" }] : [] });
+  const lines15 = [], zones15 = [], marks15 = [], t15 = M[0].t;
+  if (ch.lvl != null) { lines15.push({ y: ch.lvl, color: "--muted", label: "CHoCH", t: Math.max(ch.lvlT, t15), dash: true }); if (ch.spT >= t15) marks15.push({ t: ch.spT, y: ch.spPrice, color: "--ink", label: "sweep", below: ch.yon === "BULLISH" }); }
+  if (ch.brkT && ch.brkT >= t15) marks15.push({ t: ch.brkT, y: ch.brkC, color: "--accent", label: "kırılım" });
+  if (en.zone) zones15.push({ a: en.zone.alt, b: en.zone.ust, t: Math.max(en.zone.t, t15), fill: "--accent-soft", stroke: "--accent", label: en.zone.tip });
+  if (en.giris != null && qa.genel !== "KALDI") {
+    lines15.push({ y: en.giris, color: "--accent", label: "GİRİŞ", w: 1.6 }, { y: en.sl, color: "--bear", label: "STOP", w: 1.6 });
+    en.tps.filter(t => t.ad !== "TP3").forEach(t => lines15.push({ y: t.seviye, color: "--bull", label: t.ad, dash: t.ad !== "TP1" }));
+  }
+  drawChart($("c15"), M, { zones: zones15, lines: lines15, marks: marks15 });
 }
+
+/* ---------- ekibe sor ---------- */
+let sample = null;
+$("askBtn").addEventListener("click", async () => {
+  const q = $("q").value.trim(); if (!q) return;
+  if (!ozet) { $("ans").textContent = "Tarama verisi henüz yüklenmedi."; return; }
+  if (!sample) { $("ans").textContent = "Bu görünümde soru sorma özelliği kullanılamıyor."; return; }
+  const liste = ozet.coinler.map(({ s, kat, fiyat, bias, yon, girisFiyat, sl, rr2, girisMesafe, chochSeviye, chochMesafe, hedef }) => ({ s, kat, fiyat, bias, yon, girisFiyat, sl, rr2, girisMesafe, chochSeviye, chochMesafe, hedef }));
+  const sec = state ? { coin: state.c.s, detay: { ...state.d, m4: undefined, m15: undefined } } : null;
+  $("askBtn").disabled = true; $("ans").textContent = "Ekip düşünüyor…";
+  try {
+    await sample(`Sen bir trade analiz ekibinin sunucu ajanısın. Türkçe, kısa ve net cevap ver. Yalnızca aşağıdaki Binance tarama verisini kullan; sayı uydurma. Yatırım tavsiyesi verme; kararın kullanıcıya ait olduğunu hatırlat. Zaman damgaları epoch ms (UTC). Tarama zamanı: ${new Date(ozet.zaman).toISOString()}.\n\nLISTE:\n${JSON.stringify(liste)}\n\nSECILI COIN:\n${JSON.stringify(sec)}\n\nSORU: ${q}`,
+      { onText: ({ text }) => { $("ans").textContent = text; }, cache: false });
+  } catch (e) { $("ans").textContent = e?.code === "not_granted" ? "Soru sorma izni verilmedi." : e?.code === "rate_limited" ? "Çok sık soruldu, biraz bekleyin." : "Cevap alınamadı: " + (e?.message || e?.code); }
+  $("askBtn").disabled = false;
+});
+
+/* ---------- veri ---------- */
+(async () => {
+  const w = window.claude;
+  const db = w?.use ? await w.use("db") : null;
+  sample = w?.use ? await w.use("sample") : null;
+  if (!db) { $("meta").textContent = "Tarama verisi okunamıyor. Paneli claude.ai içinde, oturum açmış olarak açın."; return; }
+  db.collection("tarama").onSnapshot(snap => {
+    const docs = {};
+    snap.docs.forEach(s => { docs[s.id] = s.data(); });
+    if (!docs.ozet) { $("meta").textContent = "Henüz tarama yapılmadı. İlk tarama birkaç dakika içinde yazılacak."; return; }
+    ozet = docs.ozet; detay = docs;
+    renderList();
+    if (!secili) {
+      const ilk = [...ozet.coinler].sort((a, b) => a.oncelik - b.oncelik || a.sira - b.sira)[0];
+      if (ilk) { secili = ilk.s; renderList(); const d = detay["d" + ilk.parca]?.coinler?.[ilk.s]; if (d) renderDetail(ilk, d); }
+    } else {
+      const c = ozet.coinler.find(x => x.s === secili), d = c && detay["d" + c.parca]?.coinler?.[secili];
+      if (d) renderDetail(c, d);
+    }
+  }, e => { $("meta").textContent = "Tarama verisi okunamadı (" + (e?.code || "hata") + "). Sayfayı yenileyin."; });
+})();
 
 /* ---------- grafik ---------- */
 function css(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
@@ -547,28 +401,6 @@ function drawChart(cv, candles, ov) {
   });
   (ov.marks || []).forEach(mk => { const x = Xt(mk.t), y = Y(mk.y); g.fillStyle = css(mk.color); g.beginPath(); g.arc(x, y, 4, 0, 7); g.fill(); g.font = "600 10px " + css("--f-mono"); g.fillText(mk.label, Math.min(x + 6, cw - 50), y + (mk.below ? 14 : -6)); });
 }
-function drawAll() {
-  if (!state) return;
-  const { H4, M, kl, crt, ch, en, qa, bias } = state;
-  const zones4 = kl.seviyeler.map(s => ({ a: s.alt, b: s.ust, t: s.t, fill: "--accent-soft", stroke: "--accent", label: `${s.id} ${s.tip}` }));
-  const lines4 = [{ y: state.price, color: "--ink", label: "", dash: true }];
-  if (crt.aktif) {
-    const x = crt.aktif; zones4.push({ a: x.rL, b: x.rH, t: x.rStart, t1: x.sEnd, fill: "--bull-soft", stroke: "--skip", label: x.id + " " + x.tip, dash: true });
-    lines4.push({ y: x.hedef, color: "--accent", label: "HEDEF", t: x.rStart });
-  }
-  const sliced = H4.slice(-50);
-  drawChart($("c4h"), sliced, { zones: zones4.filter(z => z.b >= Math.min(...sliced.map(m => m.l)) * 0.97), lines: lines4,
-    marks: crt.aktif ? [{ t: crt.aktif.sEnd, y: crt.aktif.sweep, color: bias.bias === "BULLISH" ? "--bull" : "--bear", label: "sweep", below: bias.bias === "BULLISH" }] : [] });
-  const lines15 = [], zones15 = [], marks15 = [];
-  if (ch.lvl != null) { lines15.push({ y: ch.lvl, color: "--muted", label: "CHoCH", t: ch.lvlT, dash: true }); marks15.push({ t: ch.spT, y: ch.spPrice, color: "--ink", label: "sweep", below: ch.yon === "BULLISH" }); }
-  if (ch.brkT) marks15.push({ t: ch.brkT, y: ch.brkC, color: "--accent", label: "kırılım" });
-  if (en.zone) zones15.push({ a: en.zone.alt, b: en.zone.ust, t: en.zone.t, fill: "--accent-soft", stroke: "--accent", label: en.zone.tip });
-  if (en.giris && qa.genel !== "KALDI") {
-    lines15.push({ y: en.giris, color: "--accent", label: "GİRİŞ", w: 1.6 }, { y: en.sl, color: "--bear", label: "STOP", w: 1.6 });
-    en.tps.forEach(t => lines15.push({ y: t.seviye, color: "--bull", label: t.ad, dash: t.ad !== "TP1" }));
-  }
-  drawChart($("c15"), M, { zones: zones15, lines: lines15.filter(l => l.ad !== "TP3"), marks: marks15 });
-}
 function el(tag, attrs, kids) {
   const e = document.createElement(tag);
   for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
@@ -578,37 +410,5 @@ function el(tag, attrs, kids) {
 let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(drawAll, 120); });
 new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", drawAll);
-
-/* ---------- ekibe sor ---------- */
-let sample = null;
-$("askBtn").addEventListener("click", async () => {
-  const q = $("q").value.trim(); if (!q) return;
-  if (!state) { $("ans").textContent = "Önce bir analiz çalıştırın."; return; }
-  if (!sample) { $("ans").textContent = "Bu görünümde soru sorma özelliği kullanılamıyor."; return; }
-  const { sym, price, bias, kl, crt, ch, en, qa } = state;
-  const strip = o => JSON.parse(JSON.stringify(o, (k, v) => k === "c" ? undefined : v));
-  const ctx = JSON.stringify(strip({ sym, price, bias, kl, crt: { durum: crt.durum, liste: crt.liste }, ch, en, qa }));
-  $("askBtn").disabled = true; $("ans").textContent = "Ekip düşünüyor…";
-  try {
-    await sample(`Sen bir trade analiz ekibinin sunucu ajanısın. Türkçe, kısa ve net cevap ver. Yalnızca aşağıdaki analiz verisini kullan; sayı uydurma. Yatırım tavsiyesi verme, kararın kullanıcıya ait olduğunu hatırlat. Zaman damgaları epoch ms (UTC).\n\nANALİZ:\n${ctx}\n\nSORU: ${q}`,
-      { onText: ({ text }) => { $("ans").textContent = text; }, cache: false });
-  } catch (e) { $("ans").textContent = e?.code === "not_granted" ? "Soru sorma izni verilmedi." : e?.code === "rate_limited" ? "Çok sık soruldu, biraz bekleyin." : "Cevap alınamadı: " + (e?.message || e?.code); }
-  $("askBtn").disabled = false;
-});
-
-/* ---------- açılış ---------- */
-$("f").addEventListener("submit", ev => { ev.preventDefault(); if (mcp) run($("sym").value.trim().toUpperCase()); });
-(async () => {
-  const w = window.claude;
-  mcp = w?.use ? await w.use("mcp") : null;
-  sample = w?.use ? await w.use("sample") : null;
-  if (!mcp) { setVerdict("no", "VERİ YOK", "Bu panel canlı mum verisini claude.ai'deki Crypto.com bağlayıcısından alır. Paneli claude.ai içinde açın.", "Veri: Crypto.com"); $("run").disabled = true; return; }
-  try {
-    const lt = await mcp.listTools();
-    const s = lt.servers.find(x => x.tools.some(t => t.name === "get_candlestick"));
-    if (s) server = s.server;
-  } catch {}
-  run($("sym").value);
-})();
 })();
 </script>

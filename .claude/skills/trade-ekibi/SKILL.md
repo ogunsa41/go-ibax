@@ -31,3 +31,12 @@ Kurallar:
   `kapali: false` mum oluşmaktadır. Futures verisi için `--futures` ekle.
 - Script Binance'e erişemezse zinciri durdur ve kullanıcıya hatayı olduğu gibi bildir;
   başka kaynaktan veya tahmini veri kullanma.
+
+## Top 50 tarama ve panel
+- `python3 .claude/skills/trade-ekibi/scanner.py tara --top 50 --out <dizin>`: Binance'te 24 saatlik
+  USDT hacmine göre ilk 50 coin'i (stabil coinler ve tokenize hisseler hariç) aynı kurallarla
+  deterministik olarak tarar. Her coin'i bir kategoriye koyar (FVG bekleniyor, CHoCH bekleniyor, …)
+  ve panel için `ozet.json` ile `d0..dN.json` dosyalarını üretir.
+- Panel (CRT Trade Masası): https://claude.ai/artifact/F9ppD6A4rujkWZS4jZ7Ax1. Veriyi kendi
+  veritabanının `tarama` koleksiyonundan okur; dosyalar oraya ArtifactData ile yazılır.
+- Tarayıcı LLM ajanlarının yerine geçmez: tek bir coin için derin analiz istenirse yukarıdaki zinciri çalıştır.
