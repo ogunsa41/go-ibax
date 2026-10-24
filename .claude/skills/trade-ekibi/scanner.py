@@ -238,7 +238,8 @@ def crt_scan(c4, yon, max_r=6, max_s=3, son_n=12):
     return out
 
 
-def ajan_crt(c4, bias, kl):
+def ajan_crt(c4, bias, kl, secim="genis"):
+    """secim: aynı sweep'i paylaşan adaylardan "genis" en geniş range'i, "dar" en dar range'i seçer."""
     if bias == "NEUTRAL" or not kl["seviyeler"]:
         return {"durum": "ATLANDI", "liste": [], "aktif": None}
     allc = crt_scan(c4, bias)
@@ -252,7 +253,7 @@ def ajan_crt(c4, bias, kl):
     for x in allc:
         if x["kl"] and x["durum"] != "GECERSIZ":
             p = by.get(x["sEnd"])
-            if not p or x["rN"] > p["rN"]:
+            if not p or (x["rN"] > p["rN"] if secim == "genis" else x["rN"] < p["rN"]):
                 by[x["sEnd"]] = x
     rank = {"AKTIF": 0, "HEDEFE_ULASTI": 1}
     liste = sorted(by.values(), key=lambda x: (rank[x["durum"]], -x["sEnd"]))[:3]
