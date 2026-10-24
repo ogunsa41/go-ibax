@@ -1,0 +1,305 @@
+{
+ "donem": {
+  "bas": "2026-07-26 22:30",
+  "bit": "2026-10-24 22:30",
+  "gun": 90
+ },
+ "coin": 50,
+ "sure_sn": 562,
+ "hatalar": [],
+ "sinyal": 781,
+ "sinyalSonuclari": {
+  "KAZANC": 89,
+  "KAYIP": 333,
+  "GEC_TESPIT": 238,
+  "KACIRILDI": 104,
+  "SURESI_DOLDU": 16,
+  "ACIK_EMIR": 1
+ },
+ "genel": {
+  "islem": 422,
+  "kazanc": 89,
+  "kayip": 333,
+  "isabet": 21.1,
+  "toplamR": -31.54,
+  "ortR": -0.075,
+  "profitFactor": 0.91,
+  "maxDrawdownR": -70.52,
+  "ortHedefRR": 3.94,
+  "sabit2R": {
+   "islem": 422,
+   "toplamR": -38.0,
+   "isabet": 30.3
+  }
+ },
+ "long": {
+  "islem": 281,
+  "kazanc": 61,
+  "kayip": 220,
+  "isabet": 21.7,
+  "toplamR": -11.56,
+  "ortR": -0.041,
+  "profitFactor": 0.95,
+  "maxDrawdownR": -43.16,
+  "ortHedefRR": 3.99,
+  "sabit2R": {
+   "islem": 281,
+   "toplamR": -14.0,
+   "isabet": 31.7
+  }
+ },
+ "short": {
+  "islem": 141,
+  "kazanc": 28,
+  "kayip": 113,
+  "isabet": 19.9,
+  "toplamR": -19.98,
+  "ortR": -0.142,
+  "profitFactor": 0.82,
+  "maxDrawdownR": -53.64,
+  "ortHedefRR": 3.84,
+  "sabit2R": {
+   "islem": 141,
+   "toplamR": -24.0,
+   "isabet": 27.7
+  }
+ },
+ "guvenYuksekOrta": {
+  "islem": 233,
+  "kazanc": 53,
+  "kayip": 180,
+  "isabet": 22.7,
+  "toplamR": 8.09,
+  "ortR": 0.035,
+  "profitFactor": 1.04,
+  "maxDrawdownR": -29.65,
+  "ortHedefRR": 4.24,
+  "sabit2R": {
+   "islem": 233,
+   "toplamR": 1.0,
+   "isabet": 33.5
+  }
+ },
+ "guvenDusuk": {
+  "islem": 189,
+  "kazanc": 36,
+  "kayip": 153,
+  "isabet": 19.0,
+  "toplamR": -39.63,
+  "ortR": -0.21,
+  "profitFactor": 0.74,
+  "maxDrawdownR": -61.8,
+  "ortHedefRR": 3.57,
+  "sabit2R": {
+   "islem": 189,
+   "toplamR": -39.0,
+   "isabet": 26.5
+  }
+ },
+ "coinBazinda": {
+  "AVAUSDT": {
+   "islem": 11,
+   "R": 15.39
+  },
+  "AVAXUSDT": {
+   "islem": 12,
+   "R": 12.4
+  },
+  "BTCUSDT": {
+   "islem": 4,
+   "R": 9.83
+  },
+  "FETUSDT": {
+   "islem": 10,
+   "R": 6.22
+  },
+  "TRXUSDT": {
+   "islem": 9,
+   "R": 6.12
+  },
+  "ERAUSDT": {
+   "islem": 5,
+   "R": 5.08
+  },
+  "PENGUUSDT": {
+   "islem": 18,
+   "R": 4.41
+  },
+  "DOTUSDT": {
+   "islem": 4,
+   "R": 3.74
+  },
+  "SOLUSDT": {
+   "islem": 11,
+   "R": 3.48
+  },
+  "INJUSDT": {
+   "islem": 10,
+   "R": 3.48
+  },
+  "LTCUSDT": {
+   "islem": 12,
+   "R": 3.39
+  },
+  "BNBUSDT": {
+   "islem": 10,
+   "R": 3.0
+  },
+  "GRAMUSDT": {
+   "islem": 6,
+   "R": 2.92
+  },
+  "ZECUSDT": {
+   "islem": 14,
+   "R": 2.6
+  },
+  "TREEUSDT": {
+   "islem": 8,
+   "R": 1.69
+  },
+  "ONDOUSDT": {
+   "islem": 4,
+   "R": 1.26
+  },
+  "BCHUSDT": {
+   "islem": 7,
+   "R": 0.91
+  },
+  "LINKUSDT": {
+   "islem": 6,
+   "R": 0.53
+  },
+  "GTCUSDT": {
+   "islem": 11,
+   "R": 0.36
+  },
+  "NEARUSDT": {
+   "islem": 12,
+   "R": -0.09
+  },
+  "DASHUSDT": {
+   "islem": 7,
+   "R": -0.15
+  },
+  "WLDUSDT": {
+   "islem": 14,
+   "R": -0.18
+  },
+  "ENAUSDT": {
+   "islem": 8,
+   "R": -0.2
+  },
+  "AIUSDT": {
+   "islem": 1,
+   "R": -1.0
+  },
+  "ANIMEUSDT": {
+   "islem": 1,
+   "R": -1.0
+  },
+  "STRKUSDT": {
+   "islem": 9,
+   "R": -1.68
+  },
+  "PEPEUSDT": {
+   "islem": 2,
+   "R": -2.0
+  },
+  "AAVEUSDT": {
+   "islem": 9,
+   "R": -2.52
+  },
+  "XPLUSDT": {
+   "islem": 6,
+   "R": -2.54
+  },
+  "LAUSDT": {
+   "islem": 11,
+   "R": -2.58
+  },
+  "BMTUSDT": {
+   "islem": 13,
+   "R": -2.84
+  },
+  "ICPUSDT": {
+   "islem": 6,
+   "R": -2.93
+  },
+  "HBARUSDT": {
+   "islem": 10,
+   "R": -3.36
+  },
+  "ARBUSDT": {
+   "islem": 7,
+   "R": -3.81
+  },
+  "KATUSDT": {
+   "islem": 7,
+   "R": -4.0
+  },
+  "TRUMPUSDT": {
+   "islem": 4,
+   "R": -4.0
+  },
+  "FILUSDT": {
+   "islem": 8,
+   "R": -4.4
+  },
+  "XLMUSDT": {
+   "islem": 8,
+   "R": -4.9
+  },
+  "ADAUSDT": {
+   "islem": 15,
+   "R": -5.76
+  },
+  "PUMPUSDT": {
+   "islem": 9,
+   "R": -5.78
+  },
+  "ZROUSDT": {
+   "islem": 15,
+   "R": -5.97
+  },
+  "TAOUSDT": {
+   "islem": 6,
+   "R": -6.0
+  },
+  "ETHUSDT": {
+   "islem": 11,
+   "R": -7.7
+  },
+  "TIAUSDT": {
+   "islem": 12,
+   "R": -7.94
+  },
+  "DOGEUSDT": {
+   "islem": 8,
+   "R": -8.0
+  },
+  "QNTUSDT": {
+   "islem": 8,
+   "R": -8.0
+  },
+  "UNIUSDT": {
+   "islem": 13,
+   "R": -9.02
+  },
+  "XRPUSDT": {
+   "islem": 10,
+   "R": -10.0
+  }
+ },
+ "saatlikDurumDagilimi": {
+  "HEDEFE_ULASTI": 94508,
+  "CRT_BEKLENIYOR": 117064,
+  "BOLGE_GECILDI": 64229,
+  "CHOCH_BEKLENIYOR": 43972,
+  "RR_YETERSIZ": 23096,
+  "NOTR": 52803,
+  "KL_YOK": 5957,
+  "FVG_BEKLENIYOR": 8078,
+  "TETIKLENDI": 13961,
+  "KONTROL_KALDI": 306
+ }
+}

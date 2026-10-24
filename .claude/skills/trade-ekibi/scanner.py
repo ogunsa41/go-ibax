@@ -133,7 +133,7 @@ def ajan_bias(W, price):
 
 
 # ---------- 2 · 4H key level ----------
-def ajan_kl(c4, W, bias, price):
+def ajan_kl(c4, W, bias, price, now_ms=None):
     if bias == "NEUTRAL":
         return {"durum": "ATLANDI", "seviyeler": []}
     c = [m for m in c4 if m["closed"]]
@@ -167,7 +167,7 @@ def ajan_kl(c4, W, bias, price):
         for i in swings(c, 2, "h"):
             if not any(m["h"] > c[i]["h"] for m in c[i + 1:]) and c[i]["h"] > price:
                 cand.append({"tip": "LIKIDITE", "alt": c[i]["h"], "ust": c[i]["h"] + pad, "t": c[i]["t"]})
-    gun = (int(time.time() * 1000) // 86400000) * 86400000
+    gun = (int(now_ms or time.time() * 1000) // 86400000) * 86400000
     pd = [m for m in c if gun - 86400000 <= m["t"] < gun]
     if pd:
         if bull:
@@ -343,7 +343,7 @@ def ajan_giris(ch, crt, bias, price):
     tps.append({"ad": "TP2", "seviye": tp2, "rr": rr(tp2), "aciklama": "CRT hedefi"})
     if tp3 is not None and ((tp3 > tp2) if bull else (tp3 < tp2)):
         tps.append({"ad": "TP3", "seviye": tp3, "rr": rr(tp3), "aciklama": "Haftalık hedef"})
-    touched = any((m["l"] <= giris) if bull else (m["h"] >= giris) for m in after)
+    touched = any((m["l"] <= giris) if bull else (m["h"] >= giris) for m in c[max(ch["brk"], z["idx"]) + 1:])
     return {"durum": "RR_YETERSIZ" if rr(tp2) < 2 else "HAZIR", "yon": "LONG" if bull else "SHORT",
             "zone": z, "giris": giris, "sl": sl, "tps": tps, "touched": touched}
 
