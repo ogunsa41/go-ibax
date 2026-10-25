@@ -510,7 +510,7 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     yol = c[ch["brk"]:]
     dokundu = next((i for i in range(j0 - ch["brk"], len(yol)) if ((yol[i]["l"] <= en["giris"]) if bull else (yol[i]["h"] >= en["giris"]))), None)
     once = yol if dokundu is None else yol[:dokundu]
-    if once:
+    if once and tp2["seviye"] != en["giris"]:  # hedef = giriş ise plan zaten sıralama kontrolünden kalır
         en_uc = max(m["h"] for m in once) if bull else min(m["l"] for m in once)
         oran = abs(en_uc - en["giris"]) / abs(tp2["seviye"] - en["giris"])
         add("Hareket girişsiz gerçekleşmedi", "UYARI" if oran >= KACTI_ORAN else "GECTI", f"hedef yolunun %{oran * 100:.0f}'i girişten önce gidildi")
