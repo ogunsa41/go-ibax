@@ -234,7 +234,10 @@ def crt_scan(c4, yon, max_r=6, max_s=3, son_n=12):
             if re_ >= len(k):
                 break
             rng = k[b:re_ + 1]
-            rH, rL = max(m["h"] for m in rng), min(m["l"] for m in rng)
+            # Range = ana mum + onun high/low'u içinde kalan mumlar (konsolidasyon); trend bacağı range değildir.
+            rH, rL = rng[0]["h"], rng[0]["l"]
+            if any(m["h"] > rH or m["l"] < rL for m in rng[1:]):
+                break
             for s in range(1, max_s + 1):
                 se = re_ + s
                 if se >= len(k):
@@ -245,11 +248,13 @@ def crt_scan(c4, yon, max_r=6, max_s=3, son_n=12):
                 last = sw[-1]
                 inside = rL < last["c"] < rH
                 if yon == "BULLISH":
-                    if not (sw[0]["l"] < rL and inside and all(m["c"] <= rL for m in sw[:-1])):
+                    if not (sw[0]["l"] < rL and inside and all(m["c"] <= rL for m in sw[:-1])
+                            and all(m["h"] <= rH for m in sw)):  # iki ucu da alan mum CRT değildir
                         continue
                     uc, hedef = min(m["l"] for m in sw), rH
                 else:
-                    if not (sw[0]["h"] > rH and inside and all(m["c"] >= rH for m in sw[:-1])):
+                    if not (sw[0]["h"] > rH and inside and all(m["c"] >= rH for m in sw[:-1])
+                            and all(m["l"] >= rL for m in sw)):
                         continue
                     uc, hedef = max(m["h"] for m in sw), rL
                 after = k[se + 1:]
@@ -447,14 +452,24 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
         add("CRT mumları kapanmış 4H verisinde", "KALDI", "Range/sweep mumları bulunamadı ya da kapanmamış")
         return bitir(L)
     add("CRT mumları kapanmış 4H verisinde", "GECTI", f"{x['rN']} range + {x['sN']} sweep mumu")
-    rH, rL = max(m["h"] for m in rng), min(m["l"] for m in rng)
+    ana = rng[0]
+    rH, rL = ana["h"], ana["l"]
+    disari = [m for m in rng[1:] if m["h"] > rH or m["l"] < rL]
+    add("Range konsolidasyon (ana mum + içindeki mumlar)", "KALDI" if disari else "GECTI",
+        f"{len(disari)} range mumu ana mumun dışına çıkmış (trend bacağı)" if disari else f"ana mum {rL} – {rH}")
+    add("Range high/low ana mumdan", "GECTI" if (rH, rL) == (x["rH"], x["rL"]) else "KALDI",
+        f"ajan {x['rL']} – {x['rH']}, ham {rL} – {rH}")
     bitisik = k.index(sw[0]) == k.index(rng[-1]) + 1
     if bull:
-        tanim = sw[0]["l"] < rL and all(m["c"] <= rL for m in sw[:-1]) and rL < sw[-1]["c"] < rH
+        sweep_ok = sw[0]["l"] < rL and all(m["c"] <= rL for m in sw[:-1])
+        karsi = any(m["h"] > rH for m in sw)
     else:
-        tanim = sw[0]["h"] > rH and all(m["c"] >= rH for m in sw[:-1]) and rL < sw[-1]["c"] < rH
-    add("CRT tanımı (sweep + range içine kapanış)", "GECTI" if tanim and bitisik and rH == x["rH"] and rL == x["rL"] else "KALDI",
-        f"range {rL} – {rH}, son kapanış {sw[-1]['c']}")
+        sweep_ok = sw[0]["h"] > rH and all(m["c"] >= rH for m in sw[:-1])
+        karsi = any(m["l"] < rL for m in sw)
+    icerde = rL < sw[-1]["c"] < rH
+    add("Sweep range ucunu aldı", "GECTI" if sweep_ok and bitisik else "KALDI")
+    add("Sweep karşı ucu almadı", "KALDI" if karsi else "GECTI", "sweep mumu range'in iki ucunu da almış" if karsi else "")
+    add("Son sweep mumu range içinde kapandı", "GECTI" if icerde else "KALDI", f"kapanış {sw[-1]['c']}, range {rL} – {rH}")
     uc = min(m["l"] for m in sw) if bull else max(m["h"] for m in sw)
     sonra = [m for m in k if m["t"] > x["sEnd"]]
     bozuldu = next((m for m in sonra if ((m["c"] < uc) if bull else (m["c"] > uc))), None)

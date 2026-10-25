@@ -27,8 +27,12 @@ Girdi: tüm ajanların JSON çıktıları.
 **Yapı doğruluğu**
 - [ ] Haftalık bias kuralı (önceki hafta kapanış davranışı) ham veriyle tutarlı.
 - [ ] Her key level bias yönüne uygun tarafta (bullish → fiyat altı/içi, bearish → fiyat üstü/içi).
-- [ ] CRT: range high/low'u range mumlarının gerçek max/min'i; sweep fazı range ucunu süpürmüş,
-      son sweep mumu range içinde kapanmış; sweep ucu ilgili KL'ye değiyor. Tarayıcı çıktısıyla eşleşiyor.
+- [ ] CRT tanımını ajanın koduna/tarayıcısına GÜVENMEDEN ham 4H mumlarla kendin uygula:
+      - Range = ana mum; diğer range mumlarının high ve low'u ana mumun içinde (konsolidasyon).
+        Bir range mumu dışarı taşmışsa (trend bacağı) KALDI.
+      - Range high/low = ana mumun high/low'u (en uç fitiller değil).
+      - İlk sweep mumu range ucunu almış, sweep mumları karşı ucu almamış, son sweep mumu range içinde kapanmış.
+      - Sweep ucu ilgili KL'ye değiyor.
 - [ ] CRT mumlarının hepsi kapanmış; range ile sweep bitişik; aradaki sweep mumları range dışında kapanmış.
 - [ ] CRT'nin eşleştiği key level sweep'ten ÖNCE oluşmuş ve sweep fitili ona gerçekten değmiş.
 - [ ] CRT durumu (AKTIF/HEDEFE_ULASTI/GECERSIZ) sonraki mumlarla tutarlı. Henüz kapanmamış 4H mumun

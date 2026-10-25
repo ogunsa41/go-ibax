@@ -17,12 +17,15 @@ Ham mumlara ihtiyaç olursa: `python3 .claude/skills/trade-ekibi/binance.py mum 
 (eskiden yeniye, `kapali: false` mum oluşmaktadır).
 
 ## CRT tanımı (yalnızca 3 mum değil)
-- **Range:** ardışık 1–6 kapanmış 4H mum. Range_high = mumların en yüksek high'ı,
-  Range_low = en düşük low'u. Tek mumlu range klasik CRT'dir; birden fazla mum konsolidasyon bloğudur.
+- **Range:** bir **ana mum** (Range_high = ana mumun high'ı, Range_low = low'u). Çok mumlu range
+  yalnızca ana mumdan sonra gelen mumların high VE low'u ana mumun İÇİNDE kalıyorsa olur
+  (konsolidasyon, en fazla 6 mum). Ana mumun dışına çıkan mum range'i bitirir. Arka arkaya
+  düşen/yükselen mumlar (trend bacağı) range DEĞİLDİR; en uç fitillerden range kurma.
 - **Sweep (manipülasyon) fazı:** range'den hemen sonraki 1–3 mum.
   - Bullish: ilk sweep mumu Range_low'un altına iner; son sweep mumu range İÇİNDE kapanır;
     aradaki sweep mumları Range_low altında kapanmış olabilir (çok mumlu sweep, sonra geri alım).
   - Bearish: simetrik (Range_high üstüne çıkış, içeride kapanış).
+  - Sweep mumları range'in KARŞI ucunu almaz; iki ucu da alan mum (outside bar) CRT değildir.
 - **Dağıtım:** sweep'ten sonra hedef karşı uç (bullish → Range_high, bearish → Range_low).
 - Tipler: `2-mum` (range 1 + sweep 1), `3-mum`, `cok-mum`.
 

@@ -52,10 +52,12 @@ def klines(sembol, aralik, limit=200, futures=False):
 def crt_tara(mumlar, yon=None, max_range=6, max_sweep=3, son_n=None, hepsi=False):
     """Kapanmış mumlarda 2 mumlu, 3 mumlu ve çok mumlu CRT yapılarını bulur.
 
-    Range: ardışık 1..max_range mumun en yüksek high / en düşük low'u.
+    Range: bir ana mum ve (çok mumluysa) onu izleyen, ana mumun high/low'u İÇİNDE kalan mumlar
+    (konsolidasyon). Range high/low = ana mumun high/low'u. Trend bacağı range sayılmaz.
     Sweep: range'den hemen sonraki 1..max_sweep mum. Bullish için ilk sweep mumu range low'unun
     altına iner, son sweep mumu range içinde kapanır, aradaki sweep mumları range low'unun altında
-    kapanır (geri alınana kadar süren çok mumlu sweep). Bearish simetrik.
+    kapanır (geri alınana kadar süren çok mumlu sweep). Sweep mumları range'in karşı ucunu
+    almaz (iki tarafı da alan mum CRT değildir). Bearish simetrik.
     son_n: sweep'i son N kapanmış mum içinde bitenler. hepsi=False ise GECERSIZ olanlar atılır.
     """
     kapali = [m for m in mumlar if m["kapali"]]
@@ -67,8 +69,9 @@ def crt_tara(mumlar, yon=None, max_range=6, max_sweep=3, son_n=None, hepsi=False
             if r_son >= len(kapali):
                 break
             rng = kapali[bas:r_son + 1]
-            r_high = max(m["high"] for m in rng)
-            r_low = min(m["low"] for m in rng)
+            r_high, r_low = rng[0]["high"], rng[0]["low"]
+            if any(m["high"] > r_high or m["low"] < r_low for m in rng[1:]):
+                break  # ana mumun dışına çıkan mum range'i bitirir; daha uzun range de olamaz
             for s_uzun in range(1, max_sweep + 1):
                 s_son = r_son + s_uzun
                 if s_son >= len(kapali):
@@ -82,13 +85,15 @@ def crt_tara(mumlar, yon=None, max_range=6, max_sweep=3, son_n=None, hepsi=False
                     if y == "BULLISH":
                         uc = min(m["low"] for m in sw)
                         if not (sw[0]["low"] < r_low and icerde
-                                and all(m["close"] <= r_low for m in sw[:-1])):
+                                and all(m["close"] <= r_low for m in sw[:-1])
+                                and all(m["high"] <= r_high for m in sw)):
                             continue
                         hedef, gecersiz = r_high, uc
                     else:
                         uc = max(m["high"] for m in sw)
                         if not (sw[0]["high"] > r_high and icerde
-                                and all(m["close"] >= r_high for m in sw[:-1])):
+                                and all(m["close"] >= r_high for m in sw[:-1])
+                                and all(m["low"] >= r_low for m in sw)):
                             continue
                         hedef, gecersiz = r_low, uc
                     if son_n and s_son < len(kapali) - son_n:
