@@ -132,6 +132,32 @@ def ajan_bias(W, price):
             "pw": {k: PW[k] for k in ("t", "o", "h", "l", "c")}, "neden": neden}
 
 
+def ajan_bias_sma(W, price, n=20):
+    """Alternatif bias: kapanmış haftalık kapanışların n haftalık ortalaması ve 4 haftalık eğimi."""
+    cw = [m for m in W if m["closed"]]
+    if len(cw) < n + 4:
+        return {"bias": "NEUTRAL", "guven": "DUSUK", "mod": "sma", "neden": ["Yeterli kapanmış hafta yok"]}
+    sma = sum(m["c"] for m in cw[-n:]) / n
+    onceki = sum(m["c"] for m in cw[-n - 4:-4]) / n
+    if price > sma and sma > onceki:
+        bias = "BULLISH"
+    elif price < sma and sma < onceki:
+        bias = "BEARISH"
+    else:
+        bias = "NEUTRAL"
+    rng = cw[-12:]
+    hi, lo = max(m["h"] for m in rng), min(m["l"] for m in rng)
+    hedef = None
+    if bias == "BULLISH":
+        a = [m["h"] for m in cw if m["h"] > price]; hedef = min(a) if a else hi
+    elif bias == "BEARISH":
+        a = [m["l"] for m in cw if m["l"] < price]; hedef = max(a) if a else lo
+    eq = (hi + lo) / 2
+    return {"bias": bias, "guven": "ORTA", "mod": "sma", "yapi": "SMA", "equilibrium": eq,
+            "konum": "DISCOUNT" if price < eq else "PREMIUM", "hedef": hedef, "gecersizlik": sma,
+            "neden": [f"Fiyat {price:.6g}, {n} haftalık ortalama {sma:.6g} ({'yükselen' if sma > onceki else 'düşen'})"]}
+
+
 # ---------- 2 · 4H key level ----------
 def ajan_kl(c4, W, bias, price, now_ms=None):
     if bias == "NEUTRAL":
@@ -360,7 +386,7 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     cw = [m for m in W if m["closed"]]
     PW, PPW = cw[-1], cw[-2]
     bull = bias["bias"] == "BULLISH"
-    ok = (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
+    ok = bias.get("mod") == "sma" or (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
          (not bull and (PW["c"] < PPW["l"] or PW["h"] > PPW["h"] or bias["yapi"] == "LH-LL"))
     add("Haftalık bias ham veriyle tutarlı", "GECTI" if ok else "KALDI")
     if bias["guven"] == "DUSUK":
