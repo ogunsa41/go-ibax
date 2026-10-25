@@ -178,7 +178,7 @@ def coin_test(args):
         price = k15[-1]["c"]
         bias = sc.ajan_bias_sma(w, price) if bias_mod == "sma" else sc.ajan_bias(w, price)
         kl = sc.ajan_kl(k4, w, bias["bias"], price, now_ms=Tn)
-        crt = sc.ajan_crt(k4, bias["bias"], kl, secim=secim)
+        crt = sc.ajan_crt(k4, bias["bias"], kl, secim=secim, W=w)
         ch = sc.ajan_choch(k15, crt)
         en = sc.ajan_giris(ch, crt, bias, price)
         qa = sc.ajan_kontrol(w, k4, bias, kl, crt, ch, en, price)
@@ -194,20 +194,19 @@ def coin_test(args):
                     isler.append({"s": sembol, "T": Tn, "giris_tipi": "KIRILIM", "crtTip": x["tip"], "rN": x["rN"],
                                   "zone": "-", "guven": bias["guven"], "displacement": bool(ch.get("displacement")),
                                   "stopYuzde": abs(sim["giris"] - sim["sl"]) / sim["giris"] * 100, **sim})
-        if kat not in ("FVG_BEKLENIYOR", "TETIKLENDI"):
+        if kat not in ("FVG_BEKLENIYOR", "TETIKLENDI", "SONUCLANDI"):
             continue
         x = crt["aktif"]
         anahtarlar = {("crt", x["sEnd"], en["zone"]["t"]), ("plan", en["yon"], en["giris"], en["sl"])}
         if anahtarlar & gorulen:
             continue
         gorulen |= anahtarlar
-        if kat == "TETIKLENDI":
+        if kat in ("TETIKLENDI", "SONUCLANDI"):
             isler.append({"s": sembol, "T": Tn, "yon": en["yon"], "durum": "GEC_TESPIT"})
             continue
-        z = next(s for s in kl["seviyeler"] if s["id"] == x["kl"])
         ozellik = {
             "crtTip": x["tip"], "rN": x["rN"], "sN": x["sN"], "zone": en["zone"]["tip"], "guven": bias["guven"],
-            "yapi": bias["yapi"], "konum": bias["konum"], "klTip": z["tip"], "klKalite": z["kalite"],
+            "yapi": bias["yapi"], "konum": bias["konum"], "klTip": x["klSeviye"]["tip"],
             "displacement": bool(ch.get("displacement")), "stopYuzde": abs(en["giris"] - en["sl"]) / en["giris"] * 100,
             "crtGenislikYuzde": (x["rH"] - x["rL"]) / price * 100, "tp1Var": any(t["ad"] == "TP1" for t in en["tps"]),
             "saat": time.gmtime(Tn / 1000).tm_hour,

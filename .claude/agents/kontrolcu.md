@@ -29,7 +29,10 @@ Girdi: tüm ajanların JSON çıktıları.
 - [ ] Her key level bias yönüne uygun tarafta (bullish → fiyat altı/içi, bearish → fiyat üstü/içi).
 - [ ] CRT: range high/low'u range mumlarının gerçek max/min'i; sweep fazı range ucunu süpürmüş,
       son sweep mumu range içinde kapanmış; sweep ucu ilgili KL'ye değiyor. Tarayıcı çıktısıyla eşleşiyor.
-- [ ] CRT durumu (AKTIF/HEDEFE_ULASTI/GECERSIZ) sonraki mumlarla tutarlı.
+- [ ] CRT mumlarının hepsi kapanmış; range ile sweep bitişik; aradaki sweep mumları range dışında kapanmış.
+- [ ] CRT'nin eşleştiği key level sweep'ten ÖNCE oluşmuş ve sweep fitili ona gerçekten değmiş.
+- [ ] CRT durumu (AKTIF/HEDEFE_ULASTI/GECERSIZ) sonraki mumlarla tutarlı. Henüz kapanmamış 4H mumun
+      fitili hedefe değdiyse "AKTIF" denmesi hatadır (KALDI).
 - [ ] CHoCH: kırılım GÖVDE kapanışı, sweep noktasından SONRA, CRT sweep fazı başladıktan sonra.
 - [ ] Zaman sırası: range < sweep fazı ≤ 15m sweep noktası ≤ CHoCH kırılımı ≤ giriş yapısı oluşumu.
 
@@ -38,6 +41,14 @@ Girdi: tüm ajanların JSON çıktıları.
 - [ ] SL / giriş / TP sıralaması yöne uygun.
 - [ ] R:R değerleri doğru hesaplanmış; TP2 R:R ≥ 2.
 - [ ] SL sweep noktasının ötesinde.
+- [ ] CHoCH seviyesi gerçek bir swing (iki yanında 2'şer mum); değilse UYARI.
+- [ ] Giriş bölgesi (FVG/OB) ham 15m mumlarında gerçekten var (FVG'de 1. ve 3. mum arasında boşluk).
+
+**Plan hâlâ geçerli mi (canlı fiyat)**
+- [ ] Fiyat girişe dönmeden hedef yolunun %50'sini gittiyse "Fırsat kaçtı" (UYARI); "işlem hazır" denmemeli.
+- [ ] Girişe değdiyse sonrasında stop ya da TP2 olmuş mu? Olduysa işlem bitmiştir; "girişe değdi" denmemeli.
+- [ ] Bu kontrolleri kesin bir kuralla, önceden belirlenmiş adımlarla yap; "Kapanmamış mum kullanılmadı"
+      gibi maddeleri kontrol etmeden GECTI yazma.
 
 ## Çıktı (sonunda tek JSON bloğu)
 ```json

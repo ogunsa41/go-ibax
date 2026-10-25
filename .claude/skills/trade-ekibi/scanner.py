@@ -23,6 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from binance import klines, SPOT  # noqa: E402
 
 H4 = 4 * 3600 * 1000
+M15 = 15 * 60 * 1000
+HAFTA = 7 * 86400 * 1000
 STABIL = {"USDC", "USD1", "FDUSD", "TUSD", "DAI", "USDP", "RLUSD", "BFUSD", "EUR", "EURI", "AEUR",
           "XUSD", "USDE", "PYUSD", "U", "XAUT", "PAXG", "WBTC", "WBETH", "BNSOL"}
 PARCA = 10
@@ -224,6 +226,7 @@ def ajan_kl(c4, W, bias, price, now_ms=None):
 # ---------- 3 · 4H CRT ----------
 def crt_scan(c4, yon, max_r=6, max_s=3, son_n=12):
     k = [m for m in c4 if m["closed"]]
+    acik = [m for m in c4 if not m["closed"]][-1:]  # henüz kapanmamış mum: yalnız hedefe değme (fitil) için
     out = []
     for b in range(len(k)):
         for r in range(1, max_r + 1):
@@ -252,7 +255,7 @@ def crt_scan(c4, yon, max_r=6, max_s=3, son_n=12):
                 after = k[se + 1:]
                 if any((m["c"] < uc) if yon == "BULLISH" else (m["c"] > uc) for m in after):
                     durum = "GECERSIZ"
-                elif any((m["h"] >= hedef) if yon == "BULLISH" else (m["l"] <= hedef) for m in after):
+                elif any((m["h"] >= hedef) if yon == "BULLISH" else (m["l"] <= hedef) for m in after + acik):
                     durum = "HEDEFE_ULASTI"
                 else:
                     durum = "AKTIF"
@@ -264,17 +267,34 @@ def crt_scan(c4, yon, max_r=6, max_s=3, son_n=12):
     return out
 
 
-def ajan_crt(c4, bias, kl, secim="genis"):
+_KL_ONCE = {}
+
+
+def kl_sweep_oncesi(k, i, W, bias):
+    """Sweep mumundan (k[i]) ÖNCEKİ kapanmış verilerle key level'lar. Bugünün key level listesi kullanılamaz:
+    CRT'nin süpürdüğü likidite/FVG süpürüldüğü için oradan silinmiş olur."""
+    anahtar = (bias, k[0]["t"], k[i - 1]["t"], k[i - 1]["c"], k[i - 1]["h"], k[i - 1]["l"])
+    if anahtar not in _KL_ONCE:
+        Wb = [m for m in W if m["closed"] and m["t"] + HAFTA <= k[i]["t"]]
+        _KL_ONCE[anahtar] = ajan_kl(k[:i], Wb, bias, k[i - 1]["c"], now_ms=k[i]["t"])["seviyeler"]
+    return _KL_ONCE[anahtar]
+
+
+def ajan_crt(c4, bias, kl, secim="genis", W=()):
     """secim: aynı sweep'i paylaşan adaylardan "genis" en geniş range'i, "dar" en dar range'i seçer."""
     if bias == "NEUTRAL" or not kl["seviyeler"]:
         return {"durum": "ATLANDI", "liste": [], "aktif": None}
     allc = crt_scan(c4, bias)
+    k = [m for m in c4 if m["closed"]]
+    idx = {m["t"]: j for j, m in enumerate(k)}
     for x in allc:
         x["kl"] = None
-        for s in kl["seviyeler"]:
+        for s in kl_sweep_oncesi(k, idx[x["sStart"]], W, bias):
             if x["swLo"] <= s["ust"] and x["swHi"] >= s["alt"] and \
                     (x["sweep"] <= s["ust"] if bias == "BULLISH" else x["sweep"] >= s["alt"]):
-                x["kl"] = s["id"]; break
+                x["kl"] = s["tip"]
+                x["klSeviye"] = {"tip": s["tip"], "alt": s["alt"], "ust": s["ust"], "t": s["t"]}
+                break
     by = {}
     for x in allc:
         if x["kl"] and x["durum"] != "GECERSIZ":
@@ -373,21 +393,32 @@ def ajan_giris(ch, crt, bias, price):
     tps.append({"ad": "TP2", "seviye": tp2, "rr": rr(tp2), "aciklama": "CRT hedefi"})
     if tp3 is not None and ((tp3 > tp2) if bull else (tp3 < tp2)):
         tps.append({"ad": "TP3", "seviye": tp3, "rr": rr(tp3), "aciklama": "Haftalık hedef"})
-    touched = any((m["l"] <= giris) if bull else (m["h"] >= giris) for m in c[max(ch["brk"], z["idx"]) + 1:])
+    ilk = next((j for j in range(max(ch["brk"], z["idx"]) + 1, len(c))
+                if ((c[j]["l"] <= giris) if bull else (c[j]["h"] >= giris))), None)
+    touched = ilk is not None
     # Fiyat girişe dönmeden hedef yolunun yarısını gittiyse hareket kaçmıştır; geç gelen dönüş giriş sayılmaz.
-    uc = min(m["l"] for m in c[ch["brk"]:]) if not bull else max(m["h"] for m in c[ch["brk"]:])
-    if not touched and abs(uc - giris) >= KACTI_ORAN * abs(tp2 - giris):
+    once = c[ch["brk"]:ilk] if touched else c[ch["brk"]:]
+    uc = (max(m["h"] for m in once) if bull else min(m["l"] for m in once)) if once else giris
+    if abs(uc - giris) >= KACTI_ORAN * abs(tp2 - giris):
         return {"durum": "KACTI", "yon": "LONG" if bull else "SHORT", "zone": z, "giris": giris, "sl": sl,
-                "tps": tps, "touched": False, "uc": uc}
-    return {"durum": "RR_YETERSIZ" if rr(tp2) < 2 else "HAZIR", "yon": "LONG" if bull else "SHORT",
+                "tps": tps, "touched": touched, "uc": uc}
+    sonuc = None
+    if touched:
+        for j in range(ilk, len(c)):
+            m = c[j]
+            if (m["l"] <= sl) if bull else (m["h"] >= sl):
+                sonuc = "STOP_OLDU"; break
+            if (m["h"] >= tp2) if bull else (m["l"] <= tp2):
+                sonuc = "HEDEF_OLDU"; break
+    return {"durum": sonuc or ("RR_YETERSIZ" if rr(tp2) < 2 else "HAZIR"), "yon": "LONG" if bull else "SHORT",
             "zone": z, "giris": giris, "sl": sl, "tps": tps, "touched": touched}
 
 
 # ---------- 6 · kontrolcü ----------
 def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
+    """Diğer ajanların sonuçlarını kendi hesaplarına güvenmeden, ham mumlardan yeniden doğrular."""
     L = []
     add = lambda k, s, d="": L.append({"k": k, "s": s, "d": d})
-    add("Kapanmamış mum kullanılmadı", "GECTI", "Tüm kararlar kapanmış mumlardan")
     if bias["bias"] == "NEUTRAL":
         add("Bias NEUTRAL → zincir durdu", "GECTI")
         return bitir(L)
@@ -405,23 +436,67 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     x = crt.get("aktif")
     if not x:
         return bitir(L)
+
+    # --- CRT: tanım ham 4H mumlarla baştan kontrol edilir
     k = [m for m in c4 if m["closed"]]
+    acik = [m for m in c4 if not m["closed"]]
     rng = [m for m in k if x["rStart"] <= m["t"] <= x["rEnd"]]
     sw = [m for m in k if x["sStart"] <= m["t"] <= x["sEnd"]]
+    add("CRT yönü bias ile aynı", "GECTI" if x["yon"] == bias["bias"] else "KALDI", x["yon"])
+    if not rng or not sw or len(sw) != x["sN"] or len(rng) != x["rN"]:
+        add("CRT mumları kapanmış 4H verisinde", "KALDI", "Range/sweep mumları bulunamadı ya da kapanmamış")
+        return bitir(L)
+    add("CRT mumları kapanmış 4H verisinde", "GECTI", f"{x['rN']} range + {x['sN']} sweep mumu")
     rH, rL = max(m["h"] for m in rng), min(m["l"] for m in rng)
-    ok = rH == x["rH"] and rL == x["rL"] and ((sw[0]["l"] < rL) if bull else (sw[0]["h"] > rH)) and rL < sw[-1]["c"] < rH
-    add("CRT ham 4H veriyle doğrulandı", "GECTI" if ok else "KALDI")
-    z = next((s for s in kl["seviyeler"] if s["id"] == x["kl"]), None)
-    add("CRT sweep'i key level'a değiyor", "GECTI" if z and x["swLo"] <= z["ust"] and x["swHi"] >= z["alt"] else "KALDI")
+    bitisik = k.index(sw[0]) == k.index(rng[-1]) + 1
+    if bull:
+        tanim = sw[0]["l"] < rL and all(m["c"] <= rL for m in sw[:-1]) and rL < sw[-1]["c"] < rH
+    else:
+        tanim = sw[0]["h"] > rH and all(m["c"] >= rH for m in sw[:-1]) and rL < sw[-1]["c"] < rH
+    add("CRT tanımı (sweep + range içine kapanış)", "GECTI" if tanim and bitisik and rH == x["rH"] and rL == x["rL"] else "KALDI",
+        f"range {rL} – {rH}, son kapanış {sw[-1]['c']}")
+    uc = min(m["l"] for m in sw) if bull else max(m["h"] for m in sw)
+    sonra = [m for m in k if m["t"] > x["sEnd"]]
+    bozuldu = next((m for m in sonra if ((m["c"] < uc) if bull else (m["c"] > uc))), None)
+    hedef = next((m for m in sonra + acik if ((m["h"] >= x["hedef"]) if bull else (m["l"] <= x["hedef"]))), None)
+    add("CRT hâlâ aktif (bozulmadı, hedefe gitmedi)", "KALDI" if bozuldu or hedef else "GECTI",
+        "sweep ucunun ötesinde kapanış var" if bozuldu else "hedefe zaten ulaşıldı" if hedef else "")
+    z = x.get("klSeviye")
+    if not z:
+        add("CRT sweep'i key level'a değiyor", "KALDI", "eşleşen seviye yok")
+    else:
+        once = z["t"] < x["sStart"]
+        degdi = (uc <= z["ust"] and max(m["h"] for m in sw) >= z["alt"]) if bull else \
+                (uc >= z["alt"] and min(m["l"] for m in sw) <= z["ust"])
+        add("CRT sweep'i key level'a değiyor", "GECTI" if once and degdi else "KALDI",
+            f"{z['tip']} {z['alt']} – {z['ust']}" + ("" if once else " · seviye sweep'ten sonra oluşmuş"))
     if ch.get("durum") != "ONAYLANDI":
         return bitir(L)
-    bc = ch["_c"][ch["brk"]]
-    add("CHoCH gövde kapanışı", "GECTI" if ((bc["c"] > ch["lvl"]) if bull else (bc["c"] < ch["lvl"])) else "KALDI")
+
+    # --- CHoCH: kırılım mumu kapanmış mı, seviye gerçekten bir swing mi
+    c = ch["_c"]
+    bc = c[ch["brk"]]
+    add("CHoCH gövde kapanışı (kapanmış 15m mum)", "GECTI" if bc["closed"] and ((bc["c"] > ch["lvl"]) if bull else (bc["c"] < ch["lvl"])) else "KALDI")
+    li = next(i for i, m in enumerate(c) if m["t"] == ch["lvlT"])
+    kom = c[max(0, li - 2):li] + c[li + 1:li + 3]
+    swing = all((m["h"] < c[li]["h"]) if bull else (m["l"] > c[li]["l"]) for m in kom)
+    add("CHoCH seviyesi gerçek bir swing", "GECTI" if swing else "UYARI", "" if swing else "yedek kural: önceki 8 mumun ucu")
     order = x["rEnd"] < x["sStart"] <= ch["spT"] < ch["brkT"] and (not en.get("zone") or en["zone"]["t"] >= ch["spT"])
     add("Zaman sırası", "GECTI" if order else "KALDI")
     if not en.get("giris"):
         return bitir(L)
-    add("Giriş bölgenin değdiği kenarda", "GECTI" if en["giris"] == (en["zone"]["ust"] if bull else en["zone"]["alt"]) else "KALDI")
+
+    # --- Giriş: bölge ham 15m'de var mı, plan tutarlı mı, işlem zaten bitmiş mi
+    zo = en["zone"]
+    zi = next((i for i, m in enumerate(c) if m["t"] == zo["t"]), None)
+    if zo["tip"] == "FVG":
+        var = zi is not None and 0 < zi < len(c) - 1 and \
+            ((c[zi - 1]["h"] == zo["alt"] and c[zi + 1]["l"] == zo["ust"]) if bull else (c[zi + 1]["h"] == zo["alt"] and c[zi - 1]["l"] == zo["ust"]))
+    else:
+        var = zi is not None and c[zi]["l"] == zo["alt"] and c[zi]["h"] == zo["ust"] and \
+            ((c[zi]["c"] < c[zi]["o"]) if bull else (c[zi]["c"] > c[zi]["o"]))
+    add(f"{zo['tip']} ham 15m verisinde var", "GECTI" if var else "KALDI")
+    add("Giriş bölgenin değdiği kenarda", "GECTI" if en["giris"] == (zo["ust"] if bull else zo["alt"]) else "KALDI")
     seq = [en["sl"], en["giris"]] + [t["seviye"] for t in en["tps"]]
     srt = all((seq[i] > seq[i - 1]) if bull else (seq[i] < seq[i - 1]) for i in range(1, len(seq)))
     add("SL / giriş / TP sıralaması", "GECTI" if srt else "KALDI")
@@ -429,7 +504,20 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     add("SL sweep noktasının ötesinde", "GECTI" if ((en["sl"] < ucs) if bull else (en["sl"] > ucs)) else "KALDI")
     tp2 = next(t for t in en["tps"] if t["ad"] == "TP2")
     rr2 = abs(tp2["seviye"] - en["giris"]) / abs(en["giris"] - en["sl"])
-    add("TP2 R:R ≥ 2", "GECTI" if rr2 >= 2 else "UYARI" if en["durum"] in ("RR_YETERSIZ", "KACTI") else "KALDI", f"{rr2:.2f}")
+    add("TP2 R:R ≥ 2", "GECTI" if rr2 >= 2 else "UYARI" if en["durum"] != "HAZIR" else "KALDI", f"{rr2:.2f}")
+    # Kırılımdan sonra fiyatın gittiği yerler: plan hâlâ geçerli mi?
+    j0 = max(ch["brk"], zo["idx"]) + 1  # bölge tamamlanmadan önceki mumlar girişe değmiş sayılmaz
+    yol = c[ch["brk"]:]
+    dokundu = next((i for i in range(j0 - ch["brk"], len(yol)) if ((yol[i]["l"] <= en["giris"]) if bull else (yol[i]["h"] >= en["giris"]))), None)
+    once = yol if dokundu is None else yol[:dokundu]
+    if once:
+        en_uc = max(m["h"] for m in once) if bull else min(m["l"] for m in once)
+        oran = abs(en_uc - en["giris"]) / abs(tp2["seviye"] - en["giris"])
+        add("Hareket girişsiz gerçekleşmedi", "UYARI" if oran >= KACTI_ORAN else "GECTI", f"hedef yolunun %{oran * 100:.0f}'i girişten önce gidildi")
+    if dokundu is not None:
+        bitti = next(((m, "stop") for m in yol[dokundu:] if ((m["l"] <= en["sl"]) if bull else (m["h"] >= en["sl"]))), None) or \
+            next(((m, "hedef") for m in yol[dokundu:] if ((m["h"] >= tp2["seviye"]) if bull else (m["l"] <= tp2["seviye"]))), None)
+        add("Girişten sonra işlem açık", "UYARI" if bitti else "GECTI", f"{bitti[1]} oldu" if bitti else "")
     return bitir(L)
 
 
@@ -446,6 +534,7 @@ KATEGORI = [  # (kod, etiket, öncelik)
     ("RR_YETERSIZ", "Yapı var · R:R yetersiz", 4),
     ("BOLGE_GECILDI", "Giriş bölgesi geçildi", 5),
     ("FIRSAT_KACTI", "Hareket girişsiz gerçekleşti · fırsat kaçtı", 5),
+    ("SONUCLANDI", "İşlem girişten sonra stop/hedefle sonuçlandı", 6),
     ("CRT_BEKLENIYOR", "Key level'da CRT bekleniyor", 6),
     ("HEDEFE_ULASTI", "CRT hedefine ulaştı", 7),
     ("KL_YOK", "Bias yönünde key level yok", 8),
@@ -473,6 +562,8 @@ def sinifla(bias, kl, crt, ch, en, qa):
         return "RR_YETERSIZ"
     if en["durum"] == "KACTI":
         return "FIRSAT_KACTI"
+    if en["durum"] in ("STOP_OLDU", "HEDEF_OLDU"):
+        return "SONUCLANDI"
     return "BOLGE_GECILDI"
 
 
@@ -497,7 +588,7 @@ def analiz(sembol):
     price = m15[-1]["c"]
     bias = ajan_bias(W, price)
     kl = ajan_kl(c4, W, bias["bias"], price)
-    crt = ajan_crt(c4, bias["bias"], kl)
+    crt = ajan_crt(c4, bias["bias"], kl, W=W)
     ch = ajan_choch(m15, crt)
     en = ajan_giris(ch, crt, bias, price)
     qa = ajan_kontrol(W, c4, bias, kl, crt, ch, en, price)
@@ -516,7 +607,7 @@ def analiz(sembol):
     detay = {"bias": bias, "kl": kl, "crt": {k: v for k, v in crt.items() if k != "aktif"},
              "aktifId": crt["aktif"]["id"] if crt.get("aktif") else None,
              "ch": ch, "en": en, "qa": qa}
-    if kat in ("FVG_BEKLENIYOR", "TETIKLENDI", "CHOCH_BEKLENIYOR", "RR_YETERSIZ", "BOLGE_GECILDI", "FIRSAT_KACTI", "CRT_BEKLENIYOR", "HEDEFE_ULASTI"):
+    if kat in ("FVG_BEKLENIYOR", "TETIKLENDI", "CHOCH_BEKLENIYOR", "RR_YETERSIZ", "BOLGE_GECILDI", "FIRSAT_KACTI", "SONUCLANDI", "CRT_BEKLENIYOR", "HEDEFE_ULASTI"):
         detay["m4"] = [[m["t"], m["o"], m["h"], m["l"], m["c"]] for m in c4[-60:]]
         detay["m15"] = [[m["t"], m["o"], m["h"], m["l"], m["c"]] for m in m15[-96:]]
     return ozet, detay

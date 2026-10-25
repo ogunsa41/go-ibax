@@ -182,8 +182,8 @@ const fmtT = t => new Date(t).toISOString().slice(5, 16).replace("T", " ");
 const dpOf = p => p >= 1000 ? 2 : p >= 1 ? 4 : p >= 0.01 ? 6 : 8;
 let dp = 2, ozet = null, detay = {}, secili = null, filtre = null, state = null;
 
-const TON = { FVG_BEKLENIYOR: "go", TETIKLENDI: "go", CHOCH_BEKLENIYOR: "wait", RR_YETERSIZ: "wait", BOLGE_GECILDI: "wait", FIRSAT_KACTI: "", CRT_BEKLENIYOR: "wait", HEDEFE_ULASTI: "", KL_YOK: "", NOTR: "", KONTROL_KALDI: "no", HATA: "no" };
-const KISA = { FVG_BEKLENIYOR: "FVG bekleniyor", TETIKLENDI: "Girişe değdi", CHOCH_BEKLENIYOR: "CHoCH bekleniyor", RR_YETERSIZ: "R:R yetersiz", BOLGE_GECILDI: "Bölge geçildi", FIRSAT_KACTI: "Fırsat kaçtı", CRT_BEKLENIYOR: "CRT bekleniyor", HEDEFE_ULASTI: "CRT hedefte", KL_YOK: "Key level yok", NOTR: "Bias nötr", KONTROL_KALDI: "Kontrol kaldı", HATA: "Veri hatası" };
+const TON = { FVG_BEKLENIYOR: "go", TETIKLENDI: "go", CHOCH_BEKLENIYOR: "wait", RR_YETERSIZ: "wait", BOLGE_GECILDI: "wait", FIRSAT_KACTI: "", SONUCLANDI: "", CRT_BEKLENIYOR: "wait", HEDEFE_ULASTI: "", KL_YOK: "", NOTR: "", KONTROL_KALDI: "no", HATA: "no" };
+const KISA = { FVG_BEKLENIYOR: "FVG bekleniyor", TETIKLENDI: "Girişe değdi", CHOCH_BEKLENIYOR: "CHoCH bekleniyor", RR_YETERSIZ: "R:R yetersiz", BOLGE_GECILDI: "Bölge geçildi", FIRSAT_KACTI: "Fırsat kaçtı", SONUCLANDI: "Sonuçlandı", CRT_BEKLENIYOR: "CRT bekleniyor", HEDEFE_ULASTI: "CRT hedefte", KL_YOK: "Key level yok", NOTR: "Bias nötr", KONTROL_KALDI: "Kontrol kaldı", HATA: "Veri hatası" };
 
 /* ---------- liste ---------- */
 function renderList() {
@@ -255,7 +255,7 @@ function renderDetail(c, d) {
     ["4H key level", kl.durum === "ATLANDI" ? "ATLANDI" : (kl.seviyeler || []).length + " seviye", kl.durum === "ATLANDI" ? "skip" : (kl.seviyeler || []).length ? "ok" : "fail"],
     ["4H CRT", crt.durum, crt.durum === "AKTIF" ? "ok" : crt.durum === "ATLANDI" ? "skip" : crt.durum === "HEDEFE_ULASTI" ? "wait" : "fail"],
     ["15m CHoCH", ch.durum, ch.durum === "ONAYLANDI" ? "ok" : ch.durum === "ATLANDI" ? "skip" : ch.durum === "BEKLENIYOR" ? "wait" : "fail"],
-    ["15m giriş", en.durum, en.durum === "HAZIR" ? "ok" : en.durum === "RR_YETERSIZ" || en.durum === "BOLGE_GECILDI" || en.durum === "KACTI" ? "fail" : ch.durum === "ONAYLANDI" ? "wait" : "skip"],
+    ["15m giriş", en.durum, en.durum === "HAZIR" ? "ok" : en.durum === "RR_YETERSIZ" || en.durum === "BOLGE_GECILDI" || en.durum === "KACTI" || en.durum === "STOP_OLDU" || en.durum === "HEDEF_OLDU" ? "fail" : ch.durum === "ONAYLANDI" ? "wait" : "skip"],
     ["Kontrolcü", qa.genel, qa.genel === "GECTI" ? "ok" : qa.genel === "UYARI" ? "wait" : "fail"],
     ["Sunucu", KISA[c.kat], ton === "go" ? "ok" : ton === "wait" ? "wait" : ton === "no" ? "fail" : "skip"],
   ];
@@ -268,7 +268,7 @@ function renderDetail(c, d) {
     row("Giriş (limit)", en.giris, en.zone.tip + " kenarı", "--accent");
     row("Stop-loss", en.sl, "%" + (Math.abs(en.giris - en.sl) / en.giris * 100).toFixed(2), "--bear");
     en.tps.forEach(t => row(`${t.ad} · ${t.aciklama}`, t.seviye, "R:R " + t.rr.toFixed(2), "--bull"));
-    p.append(el("div", { style: "display:flex;gap:8px;align-items:center;margin:8px 0 12px;flex-wrap:wrap" }, [el("span", { class: "dir " + (en.yon === "LONG" ? "long" : "short") }, en.yon), el("span", { class: "note" }, en.durum === "HAZIR" ? (en.touched ? "Fiyat girişe değdi" : "Limit emir: fiyatın bölgeye dönmesi bekleniyor") : en.durum === "KACTI" ? "Fiyat girişe dönmeden hedef yolunun yarısını gitti — fırsat kaçtı, işlem önerilmiyor" : "R:R yetersiz, işlem önerilmiyor")]), g,
+    p.append(el("div", { style: "display:flex;gap:8px;align-items:center;margin:8px 0 12px;flex-wrap:wrap" }, [el("span", { class: "dir " + (en.yon === "LONG" ? "long" : "short") }, en.yon), el("span", { class: "note" }, en.durum === "HAZIR" ? (en.touched ? "Fiyat girişe değdi" : "Limit emir: fiyatın bölgeye dönmesi bekleniyor") : en.durum === "STOP_OLDU" ? "Girişten sonra stop oldu — işlem bitti" : en.durum === "HEDEF_OLDU" ? "Girişten sonra TP2 geldi — işlem bitti" : en.durum === "KACTI" ? "Fiyat girişe dönmeden hedef yolunun yarısını gitti — fırsat kaçtı, işlem önerilmiyor" : "R:R yetersiz, işlem önerilmiyor")]), g,
       el("p", { class: "note", style: "margin:12px 0 0" }, `İptal: fiyat ${en.zone.tip} bölgesini ${en.yon === "LONG" ? "altından" : "üstünden"} kapanışla geçerse veya 4H mum ${fmt(aktif?.sweep)} ${en.yon === "LONG" ? "altında" : "üstünde"} kapanırsa.`));
   } else p.append(el("p", { class: "note" }, `Şu an işlem planı yok. ${why}`));
 
@@ -276,7 +276,7 @@ function renderDetail(c, d) {
   $("checks").replaceChildren(...qa.list.map(x => el("li", {}, [el("span", { class: "pill " + stClass(x.s) }, x.s), el("span", {}, [x.k, el("span", { class: "d" }, x.d || "")])])));
 
   const klR = (kl.seviyeler || []).map(s => `${s.id} ${s.tip} ${fmt(s.alt)} – ${fmt(s.ust)} (kalite ${s.kalite})`);
-  const crtR = (crt.liste || []).map(x => `${x.id} ${x.tip} · range ${fmt(x.rL)} – ${fmt(x.rH)} · sweep ${fmt(x.sweep)} (${x.kl}) · hedef ${fmt(x.hedef)} · ${x.durum}`);
+  const crtR = (crt.liste || []).map(x => `${x.id} ${x.tip} · range ${fmt(x.rL)} – ${fmt(x.rH)} · sweep ${fmt(x.sweep)} (${x.klSeviye ? x.klSeviye.tip + " " + fmt(x.klSeviye.alt) + " – " + fmt(x.klSeviye.ust) : x.kl}) · hedef ${fmt(x.hedef)} · ${x.durum}`);
   const chR = ch.durum === "ATLANDI" ? ["Aktif CRT yok"] : ch.lvl == null ? ["15m verisi yetersiz"] : [`Sweep noktası ${fmt(ch.spPrice)} (${fmtT(ch.spT)})`, `CHoCH seviyesi ${fmt(ch.lvl)} (${fmtT(ch.lvlT)})`,
     ch.durum === "ONAYLANDI" ? `Kırılım ${fmtT(ch.brkT)} · kapanış ${fmt(ch.brkC)}${ch.displacement ? " · güçlü displacement" : ""}` : `Sweep sonrası en yakın kapanış ${fmt(ch.enYakinKapanis)}`];
   const enR = en.giris != null ? [`${en.zone.tip} ${fmt(en.zone.alt)} – ${fmt(en.zone.ust)} (${fmtT(en.zone.t)})`, `Giriş bölgenin ilk değilen kenarı: ${fmt(en.giris)}`, `Stop ${fmt(en.sl)}`] : en.zone ? [`${en.zone.tip} ${fmt(en.zone.alt)} – ${fmt(en.zone.ust)} kapanışla geçildi`] : [en.neden || "CHoCH onayı bekleniyor"];

@@ -59,6 +59,7 @@ def crt_tara(mumlar, yon=None, max_range=6, max_sweep=3, son_n=None, hepsi=False
     son_n: sweep'i son N kapanmış mum içinde bitenler. hepsi=False ise GECERSIZ olanlar atılır.
     """
     kapali = [m for m in mumlar if m["kapali"]]
+    acik = [m for m in mumlar if not m["kapali"]][-1:]  # oluşan mumun fitili hedefe değdiyse CRT bitmiştir
     sonuc = []
     for bas in range(len(kapali)):
         for r_uzun in range(1, max_range + 1):
@@ -97,7 +98,7 @@ def crt_tara(mumlar, yon=None, max_range=6, max_sweep=3, son_n=None, hepsi=False
                            for m in sonra):
                         durum = "GECERSIZ"
                     elif any((m["high"] >= hedef) if y == "BULLISH" else (m["low"] <= hedef)
-                             for m in sonra):
+                             for m in sonra + acik):
                         durum = "HEDEFE_ULASTI"
                     else:
                         durum = "AKTIF"
