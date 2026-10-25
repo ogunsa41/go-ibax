@@ -330,6 +330,9 @@ def ajan_choch(m15, crt):
 
 
 # ---------- 5 · 15m giriş ----------
+KACTI_ORAN = 0.5  # girişten TP2'ye mesafenin bu oranı dolum olmadan gidildiyse fırsat kaçmıştır
+
+
 def ajan_giris(ch, crt, bias, price):
     if ch.get("durum") != "ONAYLANDI":
         return {"durum": "BEKLE"}
@@ -371,6 +374,11 @@ def ajan_giris(ch, crt, bias, price):
     if tp3 is not None and ((tp3 > tp2) if bull else (tp3 < tp2)):
         tps.append({"ad": "TP3", "seviye": tp3, "rr": rr(tp3), "aciklama": "Haftalık hedef"})
     touched = any((m["l"] <= giris) if bull else (m["h"] >= giris) for m in c[max(ch["brk"], z["idx"]) + 1:])
+    # Fiyat girişe dönmeden hedef yolunun yarısını gittiyse hareket kaçmıştır; geç gelen dönüş giriş sayılmaz.
+    uc = min(m["l"] for m in c[ch["brk"]:]) if not bull else max(m["h"] for m in c[ch["brk"]:])
+    if not touched and abs(uc - giris) >= KACTI_ORAN * abs(tp2 - giris):
+        return {"durum": "KACTI", "yon": "LONG" if bull else "SHORT", "zone": z, "giris": giris, "sl": sl,
+                "tps": tps, "touched": False, "uc": uc}
     return {"durum": "RR_YETERSIZ" if rr(tp2) < 2 else "HAZIR", "yon": "LONG" if bull else "SHORT",
             "zone": z, "giris": giris, "sl": sl, "tps": tps, "touched": touched}
 
@@ -421,7 +429,7 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     add("SL sweep noktasının ötesinde", "GECTI" if ((en["sl"] < ucs) if bull else (en["sl"] > ucs)) else "KALDI")
     tp2 = next(t for t in en["tps"] if t["ad"] == "TP2")
     rr2 = abs(tp2["seviye"] - en["giris"]) / abs(en["giris"] - en["sl"])
-    add("TP2 R:R ≥ 2", "GECTI" if rr2 >= 2 else "UYARI" if en["durum"] == "RR_YETERSIZ" else "KALDI", f"{rr2:.2f}")
+    add("TP2 R:R ≥ 2", "GECTI" if rr2 >= 2 else "UYARI" if en["durum"] in ("RR_YETERSIZ", "KACTI") else "KALDI", f"{rr2:.2f}")
     return bitir(L)
 
 
@@ -437,6 +445,7 @@ KATEGORI = [  # (kod, etiket, öncelik)
     ("CHOCH_BEKLENIYOR", "Karakter değişimi bekleniyor", 3),
     ("RR_YETERSIZ", "Yapı var · R:R yetersiz", 4),
     ("BOLGE_GECILDI", "Giriş bölgesi geçildi", 5),
+    ("FIRSAT_KACTI", "Hareket girişsiz gerçekleşti · fırsat kaçtı", 5),
     ("CRT_BEKLENIYOR", "Key level'da CRT bekleniyor", 6),
     ("HEDEFE_ULASTI", "CRT hedefine ulaştı", 7),
     ("KL_YOK", "Bias yönünde key level yok", 8),
@@ -462,6 +471,8 @@ def sinifla(bias, kl, crt, ch, en, qa):
         return "TETIKLENDI" if en["touched"] else "FVG_BEKLENIYOR"
     if en["durum"] == "RR_YETERSIZ":
         return "RR_YETERSIZ"
+    if en["durum"] == "KACTI":
+        return "FIRSAT_KACTI"
     return "BOLGE_GECILDI"
 
 
@@ -505,7 +516,7 @@ def analiz(sembol):
     detay = {"bias": bias, "kl": kl, "crt": {k: v for k, v in crt.items() if k != "aktif"},
              "aktifId": crt["aktif"]["id"] if crt.get("aktif") else None,
              "ch": ch, "en": en, "qa": qa}
-    if kat in ("FVG_BEKLENIYOR", "TETIKLENDI", "CHOCH_BEKLENIYOR", "RR_YETERSIZ", "BOLGE_GECILDI", "CRT_BEKLENIYOR", "HEDEFE_ULASTI"):
+    if kat in ("FVG_BEKLENIYOR", "TETIKLENDI", "CHOCH_BEKLENIYOR", "RR_YETERSIZ", "BOLGE_GECILDI", "FIRSAT_KACTI", "CRT_BEKLENIYOR", "HEDEFE_ULASTI"):
         detay["m4"] = [[m["t"], m["o"], m["h"], m["l"], m["c"]] for m in c4[-60:]]
         detay["m15"] = [[m["t"], m["o"], m["h"], m["l"], m["c"]] for m in m15[-96:]]
     return ozet, detay

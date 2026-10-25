@@ -126,7 +126,8 @@ def simule(plan, m15, m15t, T):
                         "cikis": {k: m["t"] for k in anah}}
             i += 1
             break
-        if (m["h"] >= tp["TP2"]) if long else (m["l"] <= tp["TP2"]):
+        yari = giris + sc.KACTI_ORAN * (tp["TP2"] - giris)
+        if (m["h"] >= yari) if long else (m["l"] <= yari):
             return {**sonuc, "durum": "KACIRILDI"}
         if (m["c"] < zone["alt"]) if long else (m["c"] > zone["ust"]):
             return {**sonuc, "durum": "IPTAL_BOLGE"}
