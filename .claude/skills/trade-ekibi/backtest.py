@@ -33,7 +33,7 @@ import scanner as sc  # noqa: E402
 
 DK15, SAAT, H4, HAFTA, GUN = 900_000, 3_600_000, 4 * 3_600_000, 7 * 86_400_000, 86_400_000
 ADIM = DK15  # canlı tarama gibi 15 dakikada bir
-SURE = {"15m": DK15, "4h": H4, "1w": HAFTA}
+SURE = {"15m": DK15, "1h": SAAT, "4h": H4, "1d": GUN, "1w": HAFTA}
 EMIR_OMRU = 48 * SAAT
 KOMISYON = 0.002  # gidiş-dönüş
 CIKISLAR = ("TP2", "1.5R", "2R", "3R", "TP1")
