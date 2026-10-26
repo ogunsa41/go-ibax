@@ -166,6 +166,43 @@ def ajan_bias_sma(W, price, n=20):
             "neden": [f"Fiyat {price:.6g}, {n} haftalık ortalama {sma:.6g} ({'yükselen' if sma > onceki else 'düşen'})"]}
 
 
+def _haftalik_hedef(cw, bias, price):
+    if bias == "BULLISH":
+        a = [m["h"] for m in cw if m["h"] > price]
+        return min(a) if a else max(m["h"] for m in cw[-12:])
+    if bias == "BEARISH":
+        a = [m["l"] for m in cw if m["l"] < price]
+        return max(a) if a else min(m["l"] for m in cw[-12:])
+    return None
+
+
+def ajan_bias_ters(W, price):
+    """Alternatif B: haftalık yapının TERSİ (HH-HL → BEARISH, LH-LL → BULLISH), karışık yapı → NEUTRAL.
+    Ölçümde (top 50, 2021-2026) yapı yönü haftaların %43-47'sinde tuttuğu için denenir."""
+    b = ajan_bias(W, price)
+    cw = [m for m in W if m["closed"]]
+    yon = {"HH-HL": "BEARISH", "LH-LL": "BULLISH"}.get(b.get("yapi"), "NEUTRAL")
+    return {**b, "bias": yon, "guven": "DUSUK", "mod": "ters", "hedef": _haftalik_hedef(cw, yon, price),
+            "gecersizlik": None, "neden": [f"Haftalık yapı {b.get('yapi')} → tersi {yon}"]}
+
+
+def bias_sabit(W, price, yon):
+    """Alternatif C: haftalık filtre yok; verilen yön için zincir çalışır."""
+    cw = [m for m in W if m["closed"]]
+    rng = cw[-12:]
+    eq = (max(m["h"] for m in rng) + min(m["l"] for m in rng)) / 2
+    return {"bias": yon, "guven": "DUSUK", "mod": "iki", "yapi": "-", "equilibrium": eq,
+            "konum": "DISCOUNT" if price < eq else "PREMIUM", "hedef": _haftalik_hedef(cw, yon, price),
+            "gecersizlik": None, "neden": ["Haftalık filtre yok; iki yön de aranır"]}
+
+
+def bias_listesi(mod, W, price):
+    """Bir anda değerlendirilecek bias'lar: hafta / sma / ters → tek; iki → BULLISH ve BEARISH."""
+    if mod == "iki":
+        return [bias_sabit(W, price, "BULLISH"), bias_sabit(W, price, "BEARISH")]
+    return [{"sma": ajan_bias_sma, "ters": ajan_bias_ters}.get(mod, ajan_bias)(W, price)]
+
+
 # ---------- 2 · 4H key level ----------
 def ajan_kl(c4, W, bias, price, now_ms=None):
     if bias == "NEUTRAL":
@@ -436,10 +473,10 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     cw = [m for m in W if m["closed"]]
     PW, PPW = cw[-1], cw[-2]
     bull = bias["bias"] == "BULLISH"
-    ok = bias.get("mod") == "sma" or (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
+    ok = bias.get("mod") in ("sma", "ters", "iki") or (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
          (not bull and (PW["c"] < PPW["l"] or PW["h"] > PPW["h"] or bias["yapi"] == "LH-LL"))
     add("Haftalık bias ham veriyle tutarlı", "GECTI" if ok else "KALDI")
-    if bias.get("mod") != "sma":
+    if not bias.get("mod"):
         bozuk = (price < PW["l"]) if bull else (price > PW["h"])
         add("Bu hafta bias geçersizlik seviyesi kırılmadı", "KALDI" if bozuk else "GECTI",
             f"{'PW low' if bull else 'PW high'} {PW['l'] if bull else PW['h']}, fiyat {price}")

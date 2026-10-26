@@ -176,43 +176,43 @@ def coin_test(args):
         if len(w) < 4 or len(k4) < 50 or len(k15) < 100:
             continue
         price = k15[-1]["c"]
-        bias = sc.ajan_bias_sma(w, price) if bias_mod == "sma" else sc.ajan_bias(w, price)
-        kl = sc.ajan_kl(k4, w, bias["bias"], price, now_ms=Tn)
-        crt = sc.ajan_crt(k4, bias["bias"], kl, secim=secim, W=w)
-        ch = sc.ajan_choch(k15, crt)
-        en = sc.ajan_giris(ch, crt, bias, price)
-        qa = sc.ajan_kontrol(w, k4, bias, kl, crt, ch, en, price)
-        kat = sc.sinifla(bias, kl, crt, ch, en, qa)
-        sayac[kat] = sayac.get(kat, 0) + 1
-        if ch.get("durum") == "ONAYLANDI" and qa["genel"] != "KALDI" and ch["brkT"] == k15[-1]["t"]:
-            anahtar = ("kir", crt["aktif"]["sEnd"])
-            if anahtar not in gorulen:
-                gorulen.add(anahtar)
-                sim = simule_kirilim(ch, crt, price, m15, m15t, Tn)
-                if sim:
-                    x = crt["aktif"]
-                    isler.append({"s": sembol, "T": Tn, "giris_tipi": "KIRILIM", "crtTip": x["tip"], "rN": x["rN"],
-                                  "zone": "-", "guven": bias["guven"], "displacement": bool(ch.get("displacement")),
-                                  "stopYuzde": abs(sim["giris"] - sim["sl"]) / sim["giris"] * 100, **sim})
-        if kat not in ("FVG_BEKLENIYOR", "TETIKLENDI", "SONUCLANDI"):
-            continue
-        x = crt["aktif"]
-        anahtarlar = {("crt", x["sEnd"], en["zone"]["t"]), ("plan", en["yon"], en["giris"], en["sl"])}
-        if anahtarlar & gorulen:
-            continue
-        gorulen |= anahtarlar
-        if kat in ("TETIKLENDI", "SONUCLANDI"):
-            isler.append({"s": sembol, "T": Tn, "yon": en["yon"], "durum": "GEC_TESPIT"})
-            continue
-        ozellik = {
-            "crtTip": x["tip"], "rN": x["rN"], "sN": x["sN"], "zone": en["zone"]["tip"], "guven": bias["guven"],
-            "yapi": bias["yapi"], "konum": bias["konum"], "klTip": x["klSeviye"]["tip"],
-            "displacement": bool(ch.get("displacement")), "stopYuzde": abs(en["giris"] - en["sl"]) / en["giris"] * 100,
-            "crtGenislikYuzde": (x["rH"] - x["rL"]) / price * 100, "tp1Var": any(t["ad"] == "TP1" for t in en["tps"]),
-            "saat": time.gmtime(Tn / 1000).tm_hour,
-        }
-        isler.append({"s": sembol, "T": Tn, "giris_tipi": "BOLGE", "yon": en["yon"], "giris": en["giris"], "sl": en["sl"], **ozellik,
-                      **simule(en, m15, m15t, Tn)})
+        for bias in sc.bias_listesi(bias_mod, w, price):
+            kl = sc.ajan_kl(k4, w, bias["bias"], price, now_ms=Tn)
+            crt = sc.ajan_crt(k4, bias["bias"], kl, secim=secim, W=w)
+            ch = sc.ajan_choch(k15, crt)
+            en = sc.ajan_giris(ch, crt, bias, price)
+            qa = sc.ajan_kontrol(w, k4, bias, kl, crt, ch, en, price)
+            kat = sc.sinifla(bias, kl, crt, ch, en, qa)
+            sayac[kat] = sayac.get(kat, 0) + 1
+            if ch.get("durum") == "ONAYLANDI" and qa["genel"] != "KALDI" and ch["brkT"] == k15[-1]["t"]:
+                anahtar = ("kir", crt["aktif"]["yon"], crt["aktif"]["sEnd"])
+                if anahtar not in gorulen:
+                    gorulen.add(anahtar)
+                    sim = simule_kirilim(ch, crt, price, m15, m15t, Tn)
+                    if sim:
+                        x = crt["aktif"]
+                        isler.append({"s": sembol, "T": Tn, "giris_tipi": "KIRILIM", "crtTip": x["tip"], "rN": x["rN"],
+                                      "zone": "-", "guven": bias["guven"], "displacement": bool(ch.get("displacement")),
+                                      "stopYuzde": abs(sim["giris"] - sim["sl"]) / sim["giris"] * 100, **sim})
+            if kat not in ("FVG_BEKLENIYOR", "TETIKLENDI", "SONUCLANDI"):
+                continue
+            x = crt["aktif"]
+            anahtarlar = {("crt", x["yon"], x["sEnd"], en["zone"]["t"]), ("plan", en["yon"], en["giris"], en["sl"])}
+            if anahtarlar & gorulen:
+                continue
+            gorulen |= anahtarlar
+            if kat in ("TETIKLENDI", "SONUCLANDI"):
+                isler.append({"s": sembol, "T": Tn, "yon": en["yon"], "durum": "GEC_TESPIT"})
+                continue
+            ozellik = {
+                "crtTip": x["tip"], "rN": x["rN"], "sN": x["sN"], "zone": en["zone"]["tip"], "guven": bias["guven"],
+                "yapi": bias["yapi"], "konum": bias["konum"], "klTip": x["klSeviye"]["tip"],
+                "displacement": bool(ch.get("displacement")), "stopYuzde": abs(en["giris"] - en["sl"]) / en["giris"] * 100,
+                "crtGenislikYuzde": (x["rH"] - x["rL"]) / price * 100, "tp1Var": any(t["ad"] == "TP1" for t in en["tps"]),
+                "saat": time.gmtime(Tn / 1000).tm_hour,
+            }
+            isler.append({"s": sembol, "T": Tn, "giris_tipi": "BOLGE", "yon": en["yon"], "giris": en["giris"], "sl": en["sl"], **ozellik,
+                          **simule(en, m15, m15t, Tn)})
     return {"s": sembol, "sayac": sayac, "isler": isler}
 
 
@@ -222,7 +222,7 @@ def main():
     p.add_argument("--bit-gun", type=int, default=0)
     p.add_argument("--top", type=int, default=50)
     p.add_argument("--secim", choices=["genis", "dar"], default="genis")
-    p.add_argument("--bias", choices=["hafta", "sma"], default="hafta")
+    p.add_argument("--bias", choices=["hafta", "sma", "ters", "iki"], default="hafta")
     p.add_argument("--simdi", help="dönem çapası YYYY-MM-DD (varsayılan: bugün)")
     p.add_argument("--sembol", nargs="*")
     p.add_argument("--cache")
