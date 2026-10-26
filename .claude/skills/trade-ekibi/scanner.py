@@ -215,6 +215,28 @@ def ajan_bias_choch(W, price, n=1):
             "neden": [f"Son haftalık CHoCH → {yon}" + (f"; ters CHoCH seviyesi {gec:.6g}" if gec else "")]}
 
 
+def ajan_bias_btc(W, price, btc_w, mod, n=8):
+    """E/F/G: BTC rejimi ve göreceli güç. Yalnızca kapanmış haftalar; n haftalık getiri.
+    btc  : BTC n haftalık getirisi > 0 → BULLISH, < 0 → BEARISH
+    rs   : coin getirisi − BTC getirisi > 0 → BULLISH, < 0 → BEARISH
+    btcrs: ikisi aynı yönü gösteriyorsa o yön, aksi halde NEUTRAL"""
+    cw = [m for m in W if m["closed"]]
+    bw = [m for m in btc_w if m["closed"]]
+    if len(cw) < n + 1 or len(bw) < n + 1:
+        return {"bias": "NEUTRAL", "guven": "DUSUK", "mod": mod, "neden": ["Yeterli hafta yok"]}
+    rb = bw[-1]["c"] / bw[-1 - n]["c"] - 1
+    rc = cw[-1]["c"] / cw[-1 - n]["c"] - 1
+    yb = "BULLISH" if rb > 0 else "BEARISH" if rb < 0 else "NEUTRAL"
+    yr = "BULLISH" if rc - rb > 0 else "BEARISH" if rc - rb < 0 else "NEUTRAL"
+    yon = yb if mod == "btc" else yr if mod == "rs" else (yb if yb == yr else "NEUTRAL")
+    rng = cw[-12:]
+    eq = (max(m["h"] for m in rng) + min(m["l"] for m in rng)) / 2
+    return {"bias": yon, "guven": "DUSUK", "mod": mod, "yapi": "-", "equilibrium": eq,
+            "konum": "DISCOUNT" if price < eq else "PREMIUM", "hedef": _haftalik_hedef(cw, yon, price),
+            "gecersizlik": None,
+            "neden": [f"BTC {n} hafta %{rb * 100:+.1f}, coin %{rc * 100:+.1f} → {yon}"]}
+
+
 def bias_sabit(W, price, yon):
     """Alternatif C: haftalık filtre yok; verilen yön için zincir çalışır."""
     cw = [m for m in W if m["closed"]]
@@ -225,8 +247,10 @@ def bias_sabit(W, price, yon):
             "gecersizlik": None, "neden": ["Haftalık filtre yok; iki yön de aranır"]}
 
 
-def bias_listesi(mod, W, price):
-    """Bir anda değerlendirilecek bias'lar: hafta / sma / ters → tek; iki → BULLISH ve BEARISH."""
+def bias_listesi(mod, W, price, btc_w=None):
+    """Bir anda değerlendirilecek bias'lar: hafta / sma / ters / choch / btc / rs / btcrs → tek; iki → iki yön."""
+    if mod in ("btc", "rs", "btcrs"):
+        return [ajan_bias_btc(W, price, btc_w, mod)]
     if mod == "iki":
         return [bias_sabit(W, price, "BULLISH"), bias_sabit(W, price, "BEARISH")]
     return [{"sma": ajan_bias_sma, "ters": ajan_bias_ters, "choch": ajan_bias_choch}.get(mod, ajan_bias)(W, price)]
@@ -502,7 +526,7 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     cw = [m for m in W if m["closed"]]
     PW, PPW = cw[-1], cw[-2]
     bull = bias["bias"] == "BULLISH"
-    ok = bias.get("mod") in ("sma", "ters", "iki", "choch") or (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
+    ok = bool(bias.get("mod")) or (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
          (not bull and (PW["c"] < PPW["l"] or PW["h"] > PPW["h"] or bias["yapi"] == "LH-LL"))
     add("Haftalık bias ham veriyle tutarlı", "GECTI" if ok else "KALDI")
     if not bias.get("mod"):

@@ -166,6 +166,8 @@ def coin_test(args):
     except SystemExit as e:
         return {"s": sembol, "hata": str(e)}
     Wt, c4t, m15t = [m["t"] for m in W], [m["t"] for m in c4], [m["t"] for m in m15]
+    BW = aralik_cek("BTCUSDT", "1w", bas - 70 * HAFTA, bit, cache) if bias_mod in ("btc", "rs", "btcrs") else []
+    BWt = [m["t"] for m in BW]
     sayac, isler, gorulen = {}, [], set()
     T = (bas // ADIM) * ADIM
     while T <= bit:
@@ -176,7 +178,8 @@ def coin_test(args):
         if len(w) < 4 or len(k4) < 50 or len(k15) < 100:
             continue
         price = k15[-1]["c"]
-        for bias in sc.bias_listesi(bias_mod, w, price):
+        bw = kapanmis(BW, BWt, Tn, 60, HAFTA) if BW else None
+        for bias in sc.bias_listesi(bias_mod, w, price, bw):
             kl = sc.ajan_kl(k4, w, bias["bias"], price, now_ms=Tn)
             crt = sc.ajan_crt(k4, bias["bias"], kl, secim=secim, W=w)
             ch = sc.ajan_choch(k15, crt)
@@ -222,7 +225,7 @@ def main():
     p.add_argument("--bit-gun", type=int, default=0)
     p.add_argument("--top", type=int, default=50)
     p.add_argument("--secim", choices=["genis", "dar"], default="genis")
-    p.add_argument("--bias", choices=["hafta", "sma", "ters", "iki", "choch"], default="hafta")
+    p.add_argument("--bias", choices=["hafta", "sma", "ters", "iki", "choch", "btc", "rs", "btcrs"], default="hafta")
     p.add_argument("--simdi", help="dönem çapası YYYY-MM-DD (varsayılan: bugün)")
     p.add_argument("--sembol", nargs="*")
     p.add_argument("--cache")
