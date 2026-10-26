@@ -186,6 +186,35 @@ def ajan_bias_ters(W, price):
             "gecersizlik": None, "neden": [f"Haftalık yapı {b.get('yapi')} → tersi {yon}"]}
 
 
+def ajan_bias_choch(W, price, n=1):
+    """Alternatif D: haftalık karakter değişimi (CHoCH) gelene kadar yön aynı kalır.
+    Swing high/low: iki yanında n hafta daha düşük/yüksek olan hafta (sağdaki n hafta kapanınca onaylanır).
+    Yükseliş yönündeyken bir haftalık GÖVDE kapanışı son onaylı swing low'un altına inerse yön düşüşe döner;
+    düşüş yönündeyken son onaylı swing high'ın üstünde kapanış yükselişe çevirir. İlk kırılıma kadar NEUTRAL."""
+    cw = [m for m in W if m["closed"]]
+    yon, sh, sl, son_kirilim = None, None, None, None
+    for i in range(len(cw)):
+        j = i - n  # bu haftanın kapanışıyla onaylanan swing adayı
+        if j >= n:
+            if all(cw[j]["h"] > cw[j + d]["h"] and cw[j]["h"] > cw[j - d]["h"] for d in range(1, n + 1)):
+                sh = cw[j]
+            if all(cw[j]["l"] < cw[j + d]["l"] and cw[j]["l"] < cw[j - d]["l"] for d in range(1, n + 1)):
+                sl = cw[j]
+        c = cw[i]["c"]
+        if yon != "BULLISH" and sh and c > sh["h"]:
+            yon, son_kirilim = "BULLISH", cw[i]
+        elif yon != "BEARISH" and sl and c < sl["l"]:
+            yon, son_kirilim = "BEARISH", cw[i]
+    yon = yon or "NEUTRAL"
+    rng = cw[-12:]
+    eq = (max(m["h"] for m in rng) + min(m["l"] for m in rng)) / 2
+    gec = (sl["l"] if sl else None) if yon == "BULLISH" else (sh["h"] if sh else None) if yon == "BEARISH" else None
+    return {"bias": yon, "guven": "DUSUK", "mod": "choch", "yapi": "CHoCH", "equilibrium": eq,
+            "konum": "DISCOUNT" if price < eq else "PREMIUM", "hedef": _haftalik_hedef(cw, yon, price),
+            "gecersizlik": gec, "kirilim": son_kirilim and son_kirilim["t"],
+            "neden": [f"Son haftalık CHoCH → {yon}" + (f"; ters CHoCH seviyesi {gec:.6g}" if gec else "")]}
+
+
 def bias_sabit(W, price, yon):
     """Alternatif C: haftalık filtre yok; verilen yön için zincir çalışır."""
     cw = [m for m in W if m["closed"]]
@@ -200,7 +229,7 @@ def bias_listesi(mod, W, price):
     """Bir anda değerlendirilecek bias'lar: hafta / sma / ters → tek; iki → BULLISH ve BEARISH."""
     if mod == "iki":
         return [bias_sabit(W, price, "BULLISH"), bias_sabit(W, price, "BEARISH")]
-    return [{"sma": ajan_bias_sma, "ters": ajan_bias_ters}.get(mod, ajan_bias)(W, price)]
+    return [{"sma": ajan_bias_sma, "ters": ajan_bias_ters, "choch": ajan_bias_choch}.get(mod, ajan_bias)(W, price)]
 
 
 # ---------- 2 · 4H key level ----------
@@ -473,7 +502,7 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     cw = [m for m in W if m["closed"]]
     PW, PPW = cw[-1], cw[-2]
     bull = bias["bias"] == "BULLISH"
-    ok = bias.get("mod") in ("sma", "ters", "iki") or (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
+    ok = bias.get("mod") in ("sma", "ters", "iki", "choch") or (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
          (not bull and (PW["c"] < PPW["l"] or PW["h"] > PPW["h"] or bias["yapi"] == "LH-LL"))
     add("Haftalık bias ham veriyle tutarlı", "GECTI" if ok else "KALDI")
     if not bias.get("mod"):
