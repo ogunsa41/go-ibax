@@ -225,7 +225,7 @@ def main():
     p.add_argument("--bit-gun", type=int, default=0)
     p.add_argument("--top", type=int, default=50)
     p.add_argument("--secim", choices=["genis", "dar"], default="genis")
-    p.add_argument("--bias", choices=["hafta", "sma", "ters", "iki", "choch", "btc", "rs", "btcrs"], default="hafta")
+    p.add_argument("--bias", choices=["hafta", "sma", "ters", "iki", "choch", "btc", "rs", "btcrs", "kapanis"], default="hafta")
     p.add_argument("--simdi", help="dönem çapası YYYY-MM-DD (varsayılan: bugün)")
     p.add_argument("--sembol", nargs="*")
     p.add_argument("--cache")

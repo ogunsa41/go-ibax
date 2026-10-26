@@ -237,6 +237,41 @@ def ajan_bias_btc(W, price, btc_w, mod, n=8):
             "neden": [f"BTC {n} hafta %{rb * 100:+.1f}, coin %{rc * 100:+.1f} → {yon}"]}
 
 
+def ajan_bias_kapanis(W, price):
+    """Mum kapanışı bias'ı (videodaki kural). Kapanmış haftalar sırayla:
+    - önceki haftanın high'ı üstünde kapanış → BULLISH, low'u altında kapanış → BEARISH
+    - high'ı alıp üstünde kapatamadı → BEARISH (zayıflık / trend değişimi)
+    - low'u alıp altında kapatamadı → BULLISH
+    - iki ucu da aldı, içeride kapandı → mumun rengi; içeride kalan hafta → önceki yön korunur
+    Hedef: BULLISH → son kapanmış haftanın high'ı (alındıysa bir sonraki üst haftalık high), BEARISH → low'u."""
+    cw = [m for m in W if m["closed"]]
+    if len(cw) < 3:
+        return {"bias": "NEUTRAL", "guven": "DUSUK", "mod": "kapanis", "neden": ["Yeterli kapanmış hafta yok"]}
+    yon, neden = "NEUTRAL", "Henüz kapanış sinyali yok"
+    for i in range(max(1, len(cw) - 30), len(cw)):
+        p, m = cw[i - 1], cw[i]
+        if m["c"] > p["h"]:
+            yon, neden = "BULLISH", "önceki haftanın high'ı üstünde kapanış"
+        elif m["c"] < p["l"]:
+            yon, neden = "BEARISH", "önceki haftanın low'u altında kapanış"
+        elif m["h"] > p["h"] and m["l"] >= p["l"]:
+            yon, neden = "BEARISH", "önceki haftanın high'ı alındı, üstünde kapatamadı"
+        elif m["l"] < p["l"] and m["h"] <= p["h"]:
+            yon, neden = "BULLISH", "önceki haftanın low'u alındı, altında kapatamadı"
+        elif m["h"] > p["h"] and m["l"] < p["l"]:
+            yon, neden = ("BULLISH" if m["c"] > m["o"] else "BEARISH"), "iki uç alındı, içeride kapanış (mum rengi)"
+        else:
+            neden = "içeride kalan hafta, önceki yön korunuyor"
+    PW = cw[-1]
+    rng = cw[-12:]
+    eq = (max(m["h"] for m in rng) + min(m["l"] for m in rng)) / 2
+    return {"bias": yon, "guven": "ORTA", "mod": "kapanis", "yapi": "KAPANIS", "equilibrium": eq,
+            "konum": "DISCOUNT" if price < eq else "PREMIUM", "hedef": _haftalik_hedef(cw, yon, price),
+            "gecersizlik": PW["l"] if yon == "BULLISH" else PW["h"] if yon == "BEARISH" else None,
+            "pw": {k: PW[k] for k in ("t", "o", "h", "l", "c")},
+            "neden": [f"Son hafta: {neden} → {yon}"]}
+
+
 def bias_sabit(W, price, yon):
     """Alternatif C: haftalık filtre yok; verilen yön için zincir çalışır."""
     cw = [m for m in W if m["closed"]]
@@ -253,7 +288,8 @@ def bias_listesi(mod, W, price, btc_w=None):
         return [ajan_bias_btc(W, price, btc_w, mod)]
     if mod == "iki":
         return [bias_sabit(W, price, "BULLISH"), bias_sabit(W, price, "BEARISH")]
-    return [{"sma": ajan_bias_sma, "ters": ajan_bias_ters, "choch": ajan_bias_choch}.get(mod, ajan_bias)(W, price)]
+    return [{"sma": ajan_bias_sma, "ters": ajan_bias_ters, "choch": ajan_bias_choch,
+             "kapanis": ajan_bias_kapanis}.get(mod, ajan_bias)(W, price)]
 
 
 # ---------- 2 · 4H key level ----------
@@ -526,6 +562,13 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     cw = [m for m in W if m["closed"]]
     PW, PPW = cw[-1], cw[-2]
     bull = bias["bias"] == "BULLISH"
+    if bias.get("mod") == "kapanis":
+        p2, p1 = cw[-2], cw[-1]
+        beklenen = ("BULLISH" if p1["c"] > p2["h"] else "BEARISH" if p1["c"] < p2["l"] else
+                    "BEARISH" if p1["h"] > p2["h"] and p1["l"] >= p2["l"] else
+                    "BULLISH" if p1["l"] < p2["l"] and p1["h"] <= p2["h"] else None)
+        add("Kapanış bias'ı son haftayla tutarlı", "GECTI" if beklenen in (None, bias["bias"]) else "KALDI",
+            f"son hafta → {beklenen or 'içeride/iki uç (önceki yön)'}")
     ok = bool(bias.get("mod")) or (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
          (not bull and (PW["c"] < PPW["l"] or PW["h"] > PPW["h"] or bias["yapi"] == "LH-LL"))
     add("Haftalık bias ham veriyle tutarlı", "GECTI" if ok else "KALDI")
@@ -701,7 +744,7 @@ def analiz(sembol):
     c4 = mumlar(sembol, "4h", 300)
     m15 = mumlar(sembol, "15m", 1000)
     price = m15[-1]["c"]
-    bias = ajan_bias(W, price)
+    bias = ajan_bias_kapanis(W, price)
     kl = ajan_kl(c4, W, bias["bias"], price)
     crt = ajan_crt(c4, bias["bias"], kl, W=W)
     ch = ajan_choch(m15, crt)

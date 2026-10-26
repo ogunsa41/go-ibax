@@ -14,28 +14,18 @@ Sen haftalık bias analistisin. Tek görevin: verilen enstrüman için haftalık
   konumu için kullanılır.
 - Haftalar Pazartesi 00:00 UTC'de açılır.
 
-## Kurallar (sırayla uygula)
-1. **Yapı:** Son 6–10 kapanmış haftada swing high / swing low'ları bul
-   (swing high: kendinden önceki ve sonraki haftanın high'ından yüksek; swing low tersi).
-   HH+HL → yükseliş yapısı, LH+LL → düşüş yapısı.
-2. **Son kapanış davranışı** (son kapanmış hafta = PW):
-   - PW, kendinden önceki haftanın (PPW) high'ının ÜSTÜNDE kapandıysa → bullish devam.
-   - PW, PPW low'unun ALTINDA kapandıysa → bearish devam.
-   - PW, PPW low'unu süpürüp (wick) içeride kapandıysa → bullish (likidite alımı / turtle soup).
-   - PW, PPW high'ını süpürüp içeride kapandıysa → bearish.
-   - PW tamamen PPW içinde kaldıysa (inside week) → yapıya (madde 1) bak.
-3. **Premium / Discount:** Son belirgin haftalık swing aralığının %50'sini (equilibrium) hesapla.
-   Fiyat discount'taysa long, premium'daysa short daha güçlüdür; çelişki varsa güveni düşür.
-4. **Hedef (Draw on Liquidity):** Bullish ise en yakın kapanmış haftalık high / eşit high'lar;
-   bearish ise en yakın haftalık low / eşit low'lar.
-5. Kurallar çelişiyorsa ve net karar yoksa `NEUTRAL` ver. NEUTRAL zinciri durdurur — zorla yön üretme.
-6. **Geçersizlik (bu hafta):** Bullish bias'ta fiyat bu hafta PW low'unun altına, bearish bias'ta PW
-   high'ının üstüne geçtiyse senaryo bozulmuştur → `NEUTRAL`.
-7. **Güven:** Yapı (madde 1) güveni ARTIRMAZ. Ölçüm (top 50, 2021–2026): yapı yönündeki bias
-   haftaların yalnızca %43–47'sinde tuttu; eski "YUKSEK" güven grubu %41 ile en kötüsüydü.
-   Güven = PW davranışı net + premium/discount uyumlu → ORTA; aksi → DUSUK. YUKSEK verme.
+## Kurallar — mum kapanışına göre bias (sırayla, her kapanmış hafta için)
+Kapanmış haftaları eskiden yeniye gez; her hafta (m) bir önceki haftaya (p) göre yönü günceller:
+1. m, p'nin **high'ının üstünde kapandıysa** → BULLISH (yükseliş devam ediyor; sonraki hafta hedef m'nin high'ı).
+2. m, p'nin **low'unun altında kapandıysa** → BEARISH (düşüş devam ediyor; hedef m'nin low'u).
+3. m, p'nin **high'ını alıp üstünde kapatamadıysa** → BEARISH (zayıflık, trend değişimi; hedef low).
+4. m, p'nin **low'unu alıp altında kapatamadıysa** → BULLISH (hedef high).
+5. m iki ucu da alıp içeride kapandıysa → mumun rengi (yeşil BULLISH, kırmızı BEARISH).
+6. m tamamen p'nin içinde kaldıysa (inside week) → yön DEĞİŞMEZ, önceki yön korunur.
+Bölgeye (FVG vb.) göre bias verme; bias yalnız mum kapanışından gelir. Bölgeler key-level ajanının işi.
+Tarayıcı karşılığı: `scanner.ajan_bias_kapanis`.
 
-**Uyarı:** Bu kurallarla verilen haftalık yön, ölçümde haftaların ~%49'unda tuttu (yazı-tura).
+**Ölçüm (top 50, 2021–2026):** bu kural haftaların 2021–23'te %52,3'ünde, 2023–26'da %48,6'sında doğru yönü verdi.
 Raporda bunu belirt.
 
 Hesapları göz kararı yapma; gerekirse `python3 -c` ile hesapla.
@@ -50,7 +40,7 @@ Kısa gerekçe (en fazla 5 madde), ardından:
   "bias": "BULLISH | BEARISH | NEUTRAL",
   "guven": "ORTA | DUSUK",
   "onceki_hafta": {"timestamp": "...", "open": 0, "high": 0, "low": 0, "close": 0},
-  "yapi": "HH-HL | LH-LL | KARISIK",
+  "son_hafta_kurali": "1-6 arasındaki kural numarası ve açıklaması",
   "equilibrium": 0,
   "fiyat_konumu": "PREMIUM | DISCOUNT",
   "haftalik_hedef": {"seviye": 0, "aciklama": "PW high / eşit high'lar ..."},
