@@ -476,15 +476,31 @@ def ajan_choch(m15, crt):
                 li = i
     lvl = c[li]["h"] if bull else c[li]["l"]
     brk = next((i for i in range(sp + 1, len(c)) if (c[i]["c"] > lvl if bull else c[i]["c"] < lvl)), None)
+    tur = "CHOCH"
+    # CISD: süpürme ucuna kadar gelen aynı renkli mum serisinin (long: kırmızı, short: yeşil) İLK mumunun
+    # açılışı; bu açılışın ötesinde gövde kapanışı teslimatın yön değiştirdiğini gösterir.
+    if CISD:
+        ters = (lambda m: m["c"] < m["o"]) if bull else (lambda m: m["c"] > m["o"])
+        k = sp if ters(c[sp]) else sp - 1
+        if k >= 0 and ters(c[k]):
+            while k - 1 >= 0 and ters(c[k - 1]):
+                k -= 1
+            c_lvl = c[k]["o"]
+            c_brk = next((i for i in range(sp + 1, len(c)) if (c[i]["c"] > c_lvl if bull else c[i]["c"] < c_lvl)), None)
+            if c_brk is not None and (brk is None or c_brk < brk):
+                brk, lvl, li, tur = c_brk, c_lvl, k, "CISD"
     avg = sum(body(m) for m in c) / len(c)
     res = {"yon": x["yon"], "sp": sp, "spT": c[sp]["t"], "spPrice": c[sp]["l"] if bull else c[sp]["h"],
-           "lvl": lvl, "lvlT": c[li]["t"], "_c": c}
+           "lvl": lvl, "lvlT": c[li]["t"], "tur": tur, "_c": c}
     if brk is None:
         enyakin = max(m["c"] for m in c[sp + 1:]) if bull and sp + 1 < len(c) else \
             min(m["c"] for m in c[sp + 1:]) if sp + 1 < len(c) else None
         return {**res, "durum": "BEKLENIYOR", "enYakinKapanis": enyakin}
     return {**res, "durum": "ONAYLANDI", "brk": brk, "brkT": c[brk]["t"], "brkC": c[brk]["c"],
             "displacement": body(c[brk]) > 1.5 * avg}
+
+
+CISD = True  # karakter değişimi ajanı CHoCH'a ek olarak CISD de arar (hangisi önce gelirse)
 
 
 # ---------- 5 · 15m giriş ----------
@@ -635,11 +651,19 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     # --- CHoCH: kırılım mumu kapanmış mı, seviye gerçekten bir swing mi
     c = ch["_c"]
     bc = c[ch["brk"]]
-    add("CHoCH gövde kapanışı (kapanmış 15m mum)", "GECTI" if bc["closed"] and ((bc["c"] > ch["lvl"]) if bull else (bc["c"] < ch["lvl"])) else "KALDI")
+    add(f"{ch.get('tur', 'CHOCH')} gövde kapanışı (kapanmış 15m mum)", "GECTI" if bc["closed"] and ((bc["c"] > ch["lvl"]) if bull else (bc["c"] < ch["lvl"])) else "KALDI")
     li = next(i for i, m in enumerate(c) if m["t"] == ch["lvlT"])
-    kom = c[max(0, li - 2):li] + c[li + 1:li + 3]
-    swing = all((m["h"] < c[li]["h"]) if bull else (m["l"] > c[li]["l"]) for m in kom)
-    add("CHoCH seviyesi gerçek bir swing", "GECTI" if swing else "UYARI", "" if swing else "yedek kural: önceki 8 mumun ucu")
+    if ch.get("tur") == "CISD":
+        # bağımsız kontrol: seviye serinin ilk mumunun açılışı, seri süpürme ucuna kadar kesintisiz ters renk
+        seri = c[li:ch["sp"] + 1]
+        renk = all((m["c"] < m["o"]) if bull else (m["c"] > m["o"]) for m in seri[:-1]) if len(seri) > 1 else True
+        once = li == 0 or not ((c[li - 1]["c"] < c[li - 1]["o"]) if bull else (c[li - 1]["c"] > c[li - 1]["o"]))
+        add("CISD seviyesi = ters renk serisinin ilk açılışı", "GECTI" if ch["lvl"] == c[li]["o"] and renk and once else "KALDI",
+            f"seri {len(seri)} mum, açılış {c[li]['o']}")
+    else:
+        kom = c[max(0, li - 2):li] + c[li + 1:li + 3]
+        swing = all((m["h"] < c[li]["h"]) if bull else (m["l"] > c[li]["l"]) for m in kom)
+        add("CHoCH seviyesi gerçek bir swing", "GECTI" if swing else "UYARI", "" if swing else "yedek kural: önceki 8 mumun ucu")
     order = x["rEnd"] < x["sStart"] <= ch["spT"] < ch["brkT"] and (not en.get("zone") or en["zone"]["t"] >= ch["spT"])
     add("Zaman sırası", "GECTI" if order else "KALDI")
     if not en.get("giris"):

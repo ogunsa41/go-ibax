@@ -39,3 +39,9 @@ Swing tespitini ve kapanış kontrolünü `python3` ile yap.
   "not": "BEKLENIYOR ise hangi seviyenin üstünde/altında gövde kapanışı beklendiği"
 }
 ```
+
+## CISD (Change in State of Delivery) — CHoCH'a ek tetik
+Süpürme ucuna kadar gelen kesintisiz ters renk mum serisini bul (long: kırmızı mumlar, short: yeşil mumlar).
+Serinin İLK mumunun açılış fiyatı CISD seviyesidir. Bir 15m mum GÖVDESİ bu seviyenin ötesinde kapanırsa
+(long: üstünde, short: altında) CISD onaylanır. CHoCH ve CISD'den hangisi önce gelirse o onaydır;
+çıktıda `"tur": "CHOCH | CISD"` yaz. Tarayıcı karşılığı: `scanner.ajan_choch` (CISD = True).
