@@ -209,7 +209,7 @@ def coin_test(args):
                 continue
             ozellik = {
                 "crtTip": x["tip"], "rN": x["rN"], "sN": x["sN"], "zone": en["zone"]["tip"], "guven": bias["guven"],
-                "yapi": bias["yapi"], "konum": bias["konum"], "klTip": x["klSeviye"]["tip"],
+                "yapi": bias["yapi"], "konum": bias["konum"], "klTip": x["klSeviye"]["tip"] if x.get("klSeviye") else None, "klVar": bool(x.get("klSeviye")),
                 "displacement": bool(ch.get("displacement")), "stopYuzde": abs(en["giris"] - en["sl"]) / en["giris"] * 100,
                 "crtGenislikYuzde": (x["rH"] - x["rL"]) / price * 100, "tp1Var": any(t["ad"] == "TP1" for t in en["tps"]),
                 "saat": time.gmtime(Tn / 1000).tm_hour,
@@ -229,8 +229,10 @@ def main():
     p.add_argument("--simdi", help="dönem çapası YYYY-MM-DD (varsayılan: bugün)")
     p.add_argument("--sembol", nargs="*")
     p.add_argument("--cache")
+    p.add_argument("--kl-serbest", action="store_true", help="key level filtresini kapat; işlemler klVar ile işaretlenir")
     p.add_argument("--out", default="backtest")
     a = p.parse_args()
+    sc.KL_ZORUNLU = not a.kl_serbest
     os.makedirs(a.out, exist_ok=True)
     cache = a.cache or os.path.join(a.out, "cache")
     os.makedirs(cache, exist_ok=True)

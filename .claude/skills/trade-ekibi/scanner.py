@@ -405,6 +405,7 @@ def crt_scan(c4, yon, max_r=6, max_s=3, son_n=12):
 
 
 _KL_ONCE = {}
+KL_ZORUNLU = True  # False: backtest'te key level filtresi uygulanmaz, yalnız işaretlenir (elenenleri ölçmek için)
 
 
 def kl_sweep_oncesi(k, i, W, bias):
@@ -419,7 +420,7 @@ def kl_sweep_oncesi(k, i, W, bias):
 
 def ajan_crt(c4, bias, kl, secim="genis", W=()):
     """secim: aynı sweep'i paylaşan adaylardan "genis" en geniş range'i, "dar" en dar range'i seçer."""
-    if bias == "NEUTRAL" or not kl["seviyeler"]:
+    if bias == "NEUTRAL" or (KL_ZORUNLU and not kl["seviyeler"]):
         return {"durum": "ATLANDI", "liste": [], "aktif": None}
     allc = crt_scan(c4, bias)
     k = [m for m in c4 if m["closed"]]
@@ -434,7 +435,7 @@ def ajan_crt(c4, bias, kl, secim="genis", W=()):
                 break
     by = {}
     for x in allc:
-        if x["kl"] and x["durum"] != "GECERSIZ":
+        if (x["kl"] or not KL_ZORUNLU) and x["durum"] != "GECERSIZ":
             p = by.get(x["sEnd"])
             if not p or (x["rN"] > p["rN"] if secim == "genis" else x["rN"] < p["rN"]):
                 by[x["sEnd"]] = x
@@ -621,7 +622,7 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
         "sweep ucunun ötesinde kapanış var" if bozuldu else "hedefe zaten ulaşıldı" if hedef else "")
     z = x.get("klSeviye")
     if not z:
-        add("CRT sweep'i key level'a değiyor", "KALDI", "eşleşen seviye yok")
+        add("CRT sweep'i key level'a değiyor", "KALDI" if KL_ZORUNLU else "UYARI", "eşleşen seviye yok")
     else:
         once = z["t"] < x["sStart"]
         degdi = (uc <= z["ust"] and max(m["h"] for m in sw) >= z["alt"]) if bull else \
@@ -708,7 +709,7 @@ def sinifla(bias, kl, crt, ch, en, qa):
         return "KONTROL_KALDI"
     if bias["bias"] == "NEUTRAL":
         return "NOTR"
-    if not kl["seviyeler"]:
+    if KL_ZORUNLU and not kl["seviyeler"]:
         return "KL_YOK"
     if not crt.get("aktif"):
         return "HEDEFE_ULASTI" if crt["liste"] else "CRT_BEKLENIYOR"
