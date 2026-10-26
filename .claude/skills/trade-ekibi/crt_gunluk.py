@@ -197,7 +197,11 @@ def coin(args):
             isler.append({"s": s, "t": H[i]["t"], "cikis": ct, "tip": tip, "yon": "LONG" if bull else "SHORT",
                           "giris": giris, "sl": sl, "hedef": hedef, "rr": abs(hedef - giris) / risk,
                           "stopYuzde": risk / giris * 100, "maliyet": KOM * giris / risk,
-                          "R": r, "R_BE": r_be, "smt": smt, "kl": z["tip"]})
+                          "R": r, "R_BE": r_be, "smt": smt, "kl": z["tip"],
+                          "detay": {"rT": R["t"], "rH": rH, "rL": rL, "manT": H[s0]["t"], "ucT": H[uc_i]["t"],
+                                    "uc": uc, "chT": H[i]["t"], "chSeviye": lvl, "chKaynakT": H[ch[2]]["t"],
+                                    "dolumT": H[gi]["t"] if gi < len(H) else None,
+                                    "kl": {"tip": z["tip"], "alt": z["alt"], "ust": z["ust"]}}})
     return {"s": s, "isler": isler, "sayac": sayac}
 
 
