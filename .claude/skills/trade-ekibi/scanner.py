@@ -119,18 +119,24 @@ def ajan_bias(W, price):
     hi, lo = max(m["h"] for m in rng), min(m["l"] for m in rng)
     eq = (hi + lo) / 2
     konum = "DISCOUNT" if price < eq else "PREMIUM"
-    score = (1 if beh else 0) + (1 if sdir == bias else 0)
+    # Güven: haftalık yapı uyumu güveni ARTIRMAZ. 2021-2026 top 50 ölçümünde yapı yönünde bias
+    # haftaların %43-47'sinde tuttu (yazı-turanın altında) ve "YUKSEK" güven en kötü grup oldu (%41).
+    score = (1 if beh else 0)
     score += 1 if (bias == "BULLISH" and konum == "DISCOUNT") or (bias == "BEARISH" and konum == "PREMIUM") else 0
-    score -= 1 if sdir and beh and sdir != beh else 0
-    guven = "YUKSEK" if score >= 3 else "ORTA" if score == 2 else "DUSUK"
+    guven = "ORTA" if score == 2 else "DUSUK"
     hedef = None
     if bias == "BULLISH":
         a = [m["h"] for m in cw if m["h"] > price]; hedef = min(a) if a else hi
     elif bias == "BEARISH":
         a = [m["l"] for m in cw if m["l"] < price]; hedef = max(a) if a else lo
     neden.append(f"Fiyat {konum}, equilibrium {eq:.6g}")
+    gecersizlik = PW["l"] if bias == "BULLISH" else PW["h"] if bias == "BEARISH" else None
+    # Bu hafta fiyat PW'nin karşı ucunu geçtiyse haftalık senaryo bozulmuştur.
+    if gecersizlik is not None and ((price < gecersizlik) if bias == "BULLISH" else (price > gecersizlik)):
+        neden.append(f"Bu hafta fiyat geçersizlik seviyesini ({gecersizlik:.6g}) geçti → bias iptal")
+        bias, guven, hedef = "NEUTRAL", "DUSUK", None
     return {"bias": bias, "guven": guven, "yapi": yapi, "equilibrium": eq, "konum": konum, "hedef": hedef,
-            "gecersizlik": PW["l"] if bias == "BULLISH" else PW["h"] if bias == "BEARISH" else None,
+            "gecersizlik": gecersizlik,
             "pw": {k: PW[k] for k in ("t", "o", "h", "l", "c")}, "neden": neden}
 
 
@@ -433,6 +439,10 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     ok = bias.get("mod") == "sma" or (bull and (PW["c"] > PPW["h"] or PW["l"] < PPW["l"] or bias["yapi"] == "HH-HL")) or \
          (not bull and (PW["c"] < PPW["l"] or PW["h"] > PPW["h"] or bias["yapi"] == "LH-LL"))
     add("Haftalık bias ham veriyle tutarlı", "GECTI" if ok else "KALDI")
+    if bias.get("mod") != "sma":
+        bozuk = (price < PW["l"]) if bull else (price > PW["h"])
+        add("Bu hafta bias geçersizlik seviyesi kırılmadı", "KALDI" if bozuk else "GECTI",
+            f"{'PW low' if bull else 'PW high'} {PW['l'] if bull else PW['h']}, fiyat {price}")
     if bias["guven"] == "DUSUK":
         add("Bias güveni düşük", "UYARI", "Kurallar kısmen çelişiyor")
     if kl["seviyeler"]:
