@@ -25,7 +25,7 @@ import scanner as sc
 SAAT, GUN, HAFTA = bt.SAAT, bt.GUN, bt.HAFTA
 KOM = bt.KOMISYON
 GERI = 10           # range en fazla kaç gün geri
-CHOCH_SURE = 36     # manipülasyon başladıktan sonra karakter değişimi için en fazla saat
+# Karakter değişimi manipülasyon gününün (günlük mumun) içinde aranır; ertesi gün yeni range mumuyla değerlendirilir.
 EMIR_SURE = 24      # bölge girişinde limit emrin ömrü (saat)
 
 
@@ -72,10 +72,17 @@ def swing_govde(H, a, b, bull):
 
 
 def sim(H, i, long, giris, sl, hedef, be_seviye):
-    """1 saatlik mumlarla çıkış: aynı mumda stop ve hedef → stop. Dönen: (R, R_BE, çıkış zamanı)."""
+    """1 saatlik mumlarla çıkış: aynı mumda stop ve hedef → stop.
+    Dönen: (R, R_BE, R_YARIM, çıkış zamanı). R_BE: range %50'sinde stop girişe. R_YARIM: %50'de yarısı kapanır,
+    kalanın stopu girişe çekilir (videodaki "%50'de kâr al ya da stopu girişe çek")."""
     risk = abs(giris - sl)
     r = r_be = None
     be = False
+    yarim_r = abs(be_seviye - giris) / risk
+    if (be_seviye <= giris) if not long else (be_seviye >= giris):
+        pass
+    else:
+        yarim_r = None  # %50 seviyesi girişin gerisinde: yarım kâr uygulanamaz
     while i < len(H) and (r is None or r_be is None):
         m = H[i]
         stop = m["l"] <= sl if long else m["h"] >= sl
@@ -88,7 +95,15 @@ def sim(H, i, long, giris, sl, hedef, be_seviye):
         if not be and not stop and (m["h"] >= be_seviye if long else m["l"] <= be_seviye):
             be = True
         i += 1
-    return r, r_be, H[min(i, len(H)) - 1]["t"]
+    if r_be is None:
+        return r, r_be, None, H[min(i, len(H)) - 1]["t"]
+    if yarim_r is None:
+        r_y = r
+    elif be or r_be == 0.0 or (r_be > 0):
+        r_y = 0.5 * yarim_r + 0.5 * r_be
+    else:
+        r_y = -1.0
+    return r, r_be, r_y, H[min(i, len(H)) - 1]["t"]
 
 
 def coin(args):
@@ -135,7 +150,7 @@ def coin(args):
         kl = keylevels(D, W, j, bias)
         ch = None
         uc_i = s0
-        for i in range(s0, min(len(H), s0 + CHOCH_SURE)):
+        for i in range(s0, son):
             m = H[i]
             if (m["h"] >= rH) if bull else (m["l"] <= rL):
                 break   # karakter değişimi gelmeden hedef
@@ -143,7 +158,8 @@ def coin(args):
                 uc_i = i
                 continue
             o_i, lvl = swing_govde(H, max(a - 48, 0), uc_i + 1, bull)
-            if lvl is not None and (m["c"] > lvl if bull else m["c"] < lvl) and i > uc_i:
+            # CRT: kırılım mumu range'in İÇİNDE kapanmalı (fiyat range'e geri dönmüş olmalı)
+            if lvl is not None and (m["c"] > lvl if bull else m["c"] < lvl) and i > uc_i and rL < m["c"] < rH:
                 ch = (i, lvl, o_i)
                 break
         if ch is None:
@@ -187,17 +203,17 @@ def coin(args):
             if tip == "bolge":   # dolum mumu stopu da aldıysa kayıp
                 m = H[gi]
                 if (m["l"] <= sl) if bull else (m["h"] >= sl):
-                    r = r_be = -1.0; ct = m["t"]
+                    r = r_be = r_y = -1.0; ct = m["t"]
                 else:
-                    r, r_be, ct = sim(H, gi + 1, bull, giris, sl, hedef, be_sev)
+                    r, r_be, r_y, ct = sim(H, gi + 1, bull, giris, sl, hedef, be_sev)
             else:
-                r, r_be, ct = sim(H, gi, bull, giris, sl, hedef, be_sev)
+                r, r_be, r_y, ct = sim(H, gi, bull, giris, sl, hedef, be_sev)
             if r is None or r_be is None:
                 continue
             isler.append({"s": s, "t": H[i]["t"], "cikis": ct, "tip": tip, "yon": "LONG" if bull else "SHORT",
                           "giris": giris, "sl": sl, "hedef": hedef, "rr": abs(hedef - giris) / risk,
                           "stopYuzde": risk / giris * 100, "maliyet": KOM * giris / risk,
-                          "R": r, "R_BE": r_be, "smt": smt, "kl": z["tip"],
+                          "R": r, "R_BE": r_be, "R_YARIM": r_y, "smt": smt, "kl": z["tip"],
                           "detay": {"rT": R["t"], "rH": rH, "rL": rL, "manT": H[s0]["t"], "ucT": H[uc_i]["t"],
                                     "uc": uc, "chT": H[i]["t"], "chSeviye": lvl, "chKaynakT": H[ch[2]]["t"],
                                     "dolumT": H[gi]["t"] if gi < len(H) else None,
