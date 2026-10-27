@@ -607,6 +607,16 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     cw = [m for m in W if m["closed"]]
     PW, PPW = cw[-1], cw[-2]
     bull = bias["bias"] == "BULLISH"
+    if bias.get("mod") == "ters":
+        son = cw[-10:]
+        H = [son[i]["h"] for i in swings(son, 1, "h")]
+        Lw = [son[i]["l"] for i in swings(son, 1, "l")]
+        yapi = "KARISIK"
+        if len(H) >= 2 and len(Lw) >= 2:
+            yapi = "HH-HL" if H[-1] > H[-2] and Lw[-1] > Lw[-2] else "LH-LL" if H[-1] < H[-2] and Lw[-1] < Lw[-2] else "KARISIK"
+        beklenen = {"HH-HL": "BEARISH", "LH-LL": "BULLISH"}.get(yapi, "NEUTRAL")
+        add("Ters bias = haftalık yapının tersi", "GECTI" if beklenen == bias["bias"] else "KALDI",
+            f"ham yapı {yapi} → {beklenen}")
     if bias.get("mod") == "birlesik":
         a, b = ajan_bias(W, price)["bias"], ajan_bias_kapanis(W, price)["bias"]
         beklenen = a if a == b else (b if a == "NEUTRAL" else a if b == "NEUTRAL" else "NEUTRAL")
@@ -802,7 +812,7 @@ def analiz(sembol):
     c4 = mumlar(sembol, "4h", 300)
     m15 = mumlar(sembol, "15m", 1000)
     price = m15[-1]["c"]
-    bias = ajan_bias_birlesik(W, price)
+    bias = ajan_bias_ters(W, price)
     kl = ajan_kl(c4, W, bias["bias"], price)
     crt = ajan_crt(c4, bias["bias"], kl, W=W)
     ch = ajan_choch(m15, crt)
