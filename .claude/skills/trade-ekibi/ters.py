@@ -24,12 +24,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 DK15, H4, GUN, HAFTA = 900_000, 14_400_000, 86_400_000, 604_800_000
 UZUN = {"15m": DK15, "4h": H4, "1w": HAFTA}
-HOST = "https://data-api.binance.vision"
+HOST = "https://www.binance.com"  # USDT-M vadeli (perpetual)
 
 
 # ---------- veri (binance.py / scanner.py kullanılmaz) ----------
 def cek(sembol, aralik, limit):
-    with urllib.request.urlopen(f"{HOST}/api/v3/klines?symbol={sembol}&interval={aralik}&limit={limit}", timeout=30) as r:
+    with urllib.request.urlopen(f"{HOST}/fapi/v1/klines?symbol={sembol}&interval={aralik}&limit={limit}", timeout=30) as r:
         ham = json.load(r)
     simdi = time.time() * 1000
     return [{"t": k[0], "o": float(k[1]), "h": float(k[2]), "l": float(k[3]), "c": float(k[4]), "closed": k[6] < simdi}
@@ -110,8 +110,9 @@ def t_crt_hepsi(c4, yon, son_n=12, max_r=6):
     acik = [m for m in c4 if not m["closed"]][-1:]
     up = yon == "BULLISH"
     out = []
-    for j in range(len(k) - 1, max(0, len(k) - son_n) - 1, -1):
-        S = k[j]
+    K = k + acik  # en sondaki oluşan mum da sweep adayıdır (kapanış yerine şu anki fiyat)
+    for j in range(len(K) - 1, max(0, len(k) - son_n) - 1, -1):
+        S = K[j]
         for b in range(j - 1, max(-1, j - 1 - max_r), -1):
             M = k[b]
             if any(m["h"] > M["h"] or m["l"] < M["l"] for m in k[b + 1:j]):
@@ -126,23 +127,25 @@ def t_crt_hepsi(c4, yon, son_n=12, max_r=6):
             if not gecerli:
                 continue
             sonra = k[j + 1:]
-            if any((m["c"] < uc) if up else (m["c"] > uc) for m in sonra):
+            if j == len(k):
+                durum = "OLUSUYOR"
+            elif any((m["c"] < uc) if up else (m["c"] > uc) for m in sonra):
                 durum = "GECERSIZ"
             elif any((m["h"] >= hedef) if up else (m["l"] <= hedef) for m in sonra + acik):
                 durum = "HEDEFE_ULASTI"
             else:
                 durum = "AKTIF"
-            out.append({"yon": yon, "rStart": M["t"], "rEnd": k[j - 1]["t"], "rN": j - b, "sStart": S["t"], "sEnd": S["t"],
+            out.append({"yon": yon, "rStart": M["t"], "rEnd": K[j - 1]["t"], "rN": j - b, "sStart": S["t"], "sEnd": S["t"],
                         "rH": M["h"], "rL": M["l"], "sweep": uc, "hedef": hedef, "durum": durum, "_j": j})
     return out
 
 
 def t_crt(c4, W, yon):
     """Seçim: aynı sweep mumunu paylaşanlardan en geniş range; key level sweep anındaki verilerle."""
-    k = [m for m in c4 if m["closed"]]
+    k = [m for m in c4 if m["closed"]] + [m for m in c4 if not m["closed"]][-1:]
     if yon == "NEUTRAL":
         return None, []
-    secili = {}
+    secili, adaylar = {}, []
     for x in t_crt_hepsi(c4, yon):
         if x["durum"] == "GECERSIZ":
             continue
@@ -155,10 +158,17 @@ def t_crt(c4, W, yon):
         if not z:
             continue
         x["kl"] = z
+        adaylar.append(x)
+    aktifler = [x for x in adaylar if x["durum"] in ("AKTIF", "OLUSUYOR")]
+    for x in adaylar:
+        # daha eski aktif bir CRT'nin range'i içinde kalan yeni CRT o büyük CRT'nin iç hareketidir
+        if x["durum"] in ("AKTIF", "OLUSUYOR") and any(
+                o["sEnd"] < x["sEnd"] and o["rL"] <= x["rL"] and x["rH"] <= o["rH"] for o in aktifler):
+            continue
         if x["sEnd"] not in secili or x["rN"] > secili[x["sEnd"]]["rN"]:
             secili[x["sEnd"]] = x
-    liste = sorted(secili.values(), key=lambda x: (x["durum"] != "AKTIF", -x["sEnd"]))[:3]
-    return next((x for x in liste if x["durum"] == "AKTIF"), None), liste
+    liste = sorted(secili.values(), key=lambda x: (x["durum"] not in ("AKTIF", "OLUSUYOR"), -x["sEnd"]))[:3]
+    return next((x for x in liste if x["durum"] in ("AKTIF", "OLUSUYOR")), None), liste
 
 
 # ---------- 4 · CHoCH / CISD ----------
@@ -301,7 +311,7 @@ def gecmis(semboller, cache, bas, bit, adim):
         for ar in ("1w", "4h", "15m"):
             d = {}
             for fn in os.listdir(cache):
-                if fn.startswith(f"{s}_{ar}_"):
+                if fn.startswith(f"F_{s}_{ar}_"):
                     for m in json.load(open(os.path.join(cache, fn))):
                         d[m["t"]] = m
             yuk[ar] = [d[t] for t in sorted(d)]
@@ -314,6 +324,11 @@ def gecmis(semboller, cache, bas, bit, adim):
                 j = bisect.bisect_right(zt[a], T - UZUN[a])
                 return [dict(m, closed=True) for m in yuk[a][max(0, j - n):j]]
             W, c4, m15 = kes("1w", 60), kes("4h", 300), kes("15m", 1000)
+            bas4 = T // H4 * H4  # oluşan 4H mum: o 4 saatin kapanmış 15m mumlarından
+            parca = [m for m in m15 if m["t"] >= bas4]
+            if parca:
+                c4 = c4 + [{"t": bas4, "o": parca[0]["o"], "h": max(m["h"] for m in parca),
+                            "l": min(m["l"] for m in parca), "c": parca[-1]["c"], "closed": False}]
             if len(W) >= 12 and len(c4) >= 50 and len(m15) >= 100:
                 nokta += 1
                 f, *_ = karsilastir(W, c4, m15, T, sc)

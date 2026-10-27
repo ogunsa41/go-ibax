@@ -171,7 +171,7 @@ tr.sel td{background:var(--accent-soft)}
     <div class="answer" id="ans"></div>
   </section>
 
-  <p class="foot">Veri: Binance spot. Tarama her 15 dakikada Claude oturumu tarafından yapılır; kurallar .claude/skills/trade-ekibi/scanner.py içindedir. Bu bir yatırım tavsiyesi değildir; kararlar ve risk size aittir.</p>
+  <p class="foot">Veri: Binance USDT-M vadeli (perpetual). CRT "OLUSUYOR": sweep mumu henüz kapanmadı, fiyat range içinde. Tarama her 15 dakikada Claude oturumu tarafından yapılır; kurallar .claude/skills/trade-ekibi/scanner.py içindedir. Bu bir yatırım tavsiyesi değildir; kararlar ve risk size aittir.</p>
 </div>
 
 <script>
@@ -253,7 +253,7 @@ function renderDetail(c, d) {
   const steps = [
     ["Haftalık bias", bias.bias + (bias.bias !== "NEUTRAL" ? " · " + bias.guven : ""), bias.bias === "NEUTRAL" ? "fail" : "ok"],
     ["4H key level", kl.durum === "ATLANDI" ? "ATLANDI" : (kl.seviyeler || []).length + " seviye", kl.durum === "ATLANDI" ? "skip" : (kl.seviyeler || []).length ? "ok" : "fail"],
-    ["4H CRT", crt.durum, crt.durum === "AKTIF" ? "ok" : crt.durum === "ATLANDI" ? "skip" : crt.durum === "HEDEFE_ULASTI" ? "wait" : "fail"],
+    ["4H CRT", crt.durum, (crt.durum === "AKTIF" || crt.durum === "OLUSUYOR") ? "ok" : crt.durum === "ATLANDI" ? "skip" : crt.durum === "HEDEFE_ULASTI" ? "wait" : "fail"],
     ["15m CHoCH", ch.durum, ch.durum === "ONAYLANDI" ? "ok" : ch.durum === "ATLANDI" ? "skip" : ch.durum === "BEKLENIYOR" ? "wait" : "fail"],
     ["15m giriş", en.durum, en.durum === "HAZIR" ? "ok" : en.durum === "RR_YETERSIZ" || en.durum === "BOLGE_GECILDI" || en.durum === "KACTI" || en.durum === "STOP_OLDU" || en.durum === "HEDEF_OLDU" ? "fail" : ch.durum === "ONAYLANDI" ? "wait" : "skip"],
     ["Kontrolcü", qa.genel, qa.genel === "GECTI" ? "ok" : qa.genel === "UYARI" ? "wait" : "fail"],

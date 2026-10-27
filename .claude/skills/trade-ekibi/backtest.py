@@ -40,13 +40,14 @@ CIKISLAR = ("TP2", "1.5R", "2R", "3R", "TP1")
 
 
 def aralik_cek(sembol, aralik, bas, bit, cache):
-    yol = os.path.join(cache, f"{sembol}_{aralik}_{bas}_{bit}.json")
+    on = "F_" if sc.VADELI else ""
+    yol = os.path.join(cache, f"{on}{sembol}_{aralik}_{bas}_{bit}.json")
     if os.path.exists(yol):
         with open(yol) as f:
             return json.load(f)
     out, t = [], bas
     while t < bit:
-        ham = sc.get_json(f"/api/v3/klines?symbol={sembol}&interval={aralik}&startTime={t}&endTime={bit}&limit=1000")
+        ham = sc.get_json(f"/{'fapi/v1' if sc.VADELI else 'api/v3'}/klines?symbol={sembol}&interval={aralik}&startTime={t}&endTime={bit}&limit=1000", sc.VADELI)
         if not ham:
             break
         out += [{"t": k[0], "o": float(k[1]), "h": float(k[2]), "l": float(k[3]), "c": float(k[4]), "closed": True} for k in ham]
@@ -175,6 +176,12 @@ def coin_test(args):
         w = kapanmis(W, Wt, Tn, 60, HAFTA)
         k4 = kapanmis(c4, c4t, Tn, 300, H4)
         k15 = kapanmis(m15, m15t, Tn, 1000, DK15)
+        if sc.OLUSAN_SWEEP and k15:  # oluşan 4H mum (canlıdaki kapanmamış mum) o 4 saatin 15m mumlarından
+            b4 = Tn // H4 * H4
+            parca = k15[bisect.bisect_left([m["t"] for m in k15[-16:]], b4) + len(k15) - min(16, len(k15)):]
+            if parca:
+                k4 = k4 + [{"t": b4, "o": parca[0]["o"], "h": max(m["h"] for m in parca),
+                            "l": min(m["l"] for m in parca), "c": parca[-1]["c"], "closed": False}]
         if len(w) < 4 or len(k4) < 50 or len(k15) < 100:
             continue
         price = k15[-1]["c"]

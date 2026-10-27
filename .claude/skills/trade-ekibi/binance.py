@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 
 SPOT = ["https://api.binance.com", "https://data-api.binance.vision"]
-FUTURES = ["https://fapi.binance.com"]
+FUTURES = ["https://fapi.binance.com", "https://www.binance.com"]
 
 
 def klines(sembol, aralik, limit=200, futures=False):

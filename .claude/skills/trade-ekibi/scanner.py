@@ -20,7 +20,9 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from binance import klines, SPOT  # noqa: E402
+from binance import klines, SPOT, FUTURES  # noqa: E402
+
+VADELI = True  # veri: Binance USDT-M vadeli (perpetual) — kullanıcı vadeli grafikte işlem yapıyor; spot fiyatlar farklı
 
 H4 = 4 * 3600 * 1000
 M15 = 15 * 60 * 1000
@@ -30,8 +32,8 @@ STABIL = {"USDC", "USD1", "FDUSD", "TUSD", "DAI", "USDP", "RLUSD", "BFUSD", "EUR
 PARCA = 10
 
 
-def get_json(path):
-    for host in SPOT:
+def get_json(path, vadeli=False):
+    for host in (FUTURES if vadeli else SPOT):
         try:
             with urllib.request.urlopen(host + path, timeout=30) as r:
                 return json.load(r)
@@ -41,6 +43,15 @@ def get_json(path):
 
 
 def top_semboller(n):
+    if VADELI:
+        info = get_json("/fapi/v1/exchangeInfo", True)
+        aktif = {s["symbol"]: s["baseAsset"] for s in info["symbols"] if s["quoteAsset"] == "USDT"
+                 and s["status"] == "TRADING" and s.get("contractType") == "PERPETUAL"
+                 and s.get("underlyingType", "COIN") == "COIN"}
+        tick = get_json("/fapi/v1/ticker/24hr", True)
+        aday = [t for t in tick if t["symbol"] in aktif and aktif[t["symbol"]] not in STABIL]
+        aday.sort(key=lambda t: -float(t["quoteVolume"]))
+        return [(t["symbol"], float(t["quoteVolume"])) for t in aday[:n]]
     info = get_json("/api/v3/exchangeInfo?permissions=SPOT")
     hisse = {s["symbol"] for s in info["symbols"]
              if any("TRD_GRP_261" in p for p in s.get("permissionSets", []))}
@@ -56,7 +67,7 @@ def top_semboller(n):
 
 def mumlar(sembol, aralik, limit):
     out = []
-    for k in klines(sembol, aralik, limit):
+    for k in klines(sembol, aralik, limit, futures=VADELI):
         t = calendar.timegm(time.strptime(k["timestamp"], "%Y-%m-%dT%H:%M:%SZ")) * 1000
         out.append({"t": t, "o": k["open"], "h": k["high"], "l": k["low"], "c": k["close"], "closed": k["kapali"]})
     return out
@@ -388,10 +399,14 @@ def crt_tara_tip(r):
     return "klasik" if r == 1 else "ic-mum"
 
 
+OLUSAN_SWEEP = True  # B modeli: oluşan (kapanmamış) 4H mum da sweep sayılır; fiyat şu an range içindeyse CRT "OLUSUYOR"
+
+
 def crt_scan(c4, yon, max_r=6, max_s=None, son_n=12):
     max_s = max_s or MAX_SWEEP
     k = [m for m in c4 if m["closed"]]
-    acik = [m for m in c4 if not m["closed"]][-1:]  # henüz kapanmamış mum: yalnız hedefe değme (fitil) için
+    acik = [m for m in c4 if not m["closed"]][-1:]  # henüz kapanmamış mum
+    K = k + (acik if OLUSAN_SWEEP else [])
     out = []
     for b in range(len(k)):
         for r in range(1, max_r + 1):
@@ -405,11 +420,14 @@ def crt_scan(c4, yon, max_r=6, max_s=None, son_n=12):
                 break
             for s in range(1, max_s + 1):
                 se = re_ + s
-                if se >= len(k):
+                if se >= len(K):
+                    break
+                olusan = se == len(k)  # sweep mumu henüz kapanmadı: kapanış yerine şu anki fiyat range içinde olmalı
+                if olusan and s > 1:
                     break
                 if se < len(k) - son_n:
                     continue
-                sw = k[re_ + 1:se + 1]
+                sw = K[re_ + 1:se + 1]
                 last = sw[-1]
                 inside = rL < last["c"] < rH
                 if yon == "BULLISH":
@@ -423,7 +441,9 @@ def crt_scan(c4, yon, max_r=6, max_s=None, son_n=12):
                         continue
                     uc, hedef = max(m["h"] for m in sw), rL
                 after = k[se + 1:]
-                if any((m["c"] < uc) if yon == "BULLISH" else (m["c"] > uc) for m in after):
+                if olusan:
+                    durum = "OLUSUYOR"
+                elif any((m["c"] < uc) if yon == "BULLISH" else (m["c"] > uc) for m in after):
                     durum = "GECERSIZ"
                 elif any((m["h"] >= hedef) if yon == "BULLISH" else (m["l"] <= hedef) for m in after + acik):
                     durum = "HEDEFE_ULASTI"
@@ -435,6 +455,17 @@ def crt_scan(c4, yon, max_r=6, max_s=None, son_n=12):
                             "swHi": max(m["h"] for m in sw), "swLo": min(m["l"] for m in sw),
                             "sweep": uc, "hedef": hedef, "durum": durum})
     return out
+
+
+AKTIF_DURUM = ("AKTIF", "OLUSUYOR")
+
+
+def ic_ice_ele(adaylar):
+    """Range'i daha önceki aktif bir CRT'nin range'i İÇİNDE kalan yeni aktif CRT, o büyük CRT'nin dağıtım
+    fazındaki iç harekettir; ana CRT büyük olandır (ör. ERA 26 Eki 00:00 range'i)."""
+    akt = [x for x in adaylar if x["durum"] in AKTIF_DURUM]
+    return [x for x in adaylar if not (x["durum"] in AKTIF_DURUM and any(
+        o is not x and o["sEnd"] < x["sEnd"] and o["rL"] <= x["rL"] and x["rH"] <= o["rH"] for o in akt))]
 
 
 _KL_ONCE = {}
@@ -456,7 +487,7 @@ def ajan_crt(c4, bias, kl, secim="genis", W=()):
     if bias == "NEUTRAL" or (KL_ZORUNLU and not kl["seviyeler"]):
         return {"durum": "ATLANDI", "liste": [], "aktif": None}
     allc = crt_scan(c4, bias)
-    k = [m for m in c4 if m["closed"]]
+    k = [m for m in c4 if m["closed"]] + [m for m in c4 if not m["closed"]][-1:]  # oluşan sweep mumu için
     idx = {m["t"]: j for j, m in enumerate(k)}
     for x in allc:
         x["kl"] = None
@@ -467,17 +498,16 @@ def ajan_crt(c4, bias, kl, secim="genis", W=()):
                 x["klSeviye"] = {"tip": s["tip"], "alt": s["alt"], "ust": s["ust"], "t": s["t"]}
                 break
     by = {}
-    for x in allc:
-        if (x["kl"] or not KL_ZORUNLU) and x["durum"] != "GECERSIZ":
-            p = by.get(x["sEnd"])
-            if not p or (x["rN"] > p["rN"] if secim == "genis" else x["rN"] < p["rN"]):
-                by[x["sEnd"]] = x
-    rank = {"AKTIF": 0, "HEDEFE_ULASTI": 1}
+    for x in ic_ice_ele([x for x in allc if (x["kl"] or not KL_ZORUNLU) and x["durum"] != "GECERSIZ"]):
+        p = by.get(x["sEnd"])
+        if not p or (x["rN"] > p["rN"] if secim == "genis" else x["rN"] < p["rN"]):
+            by[x["sEnd"]] = x
+    rank = {"OLUSUYOR": 0, "AKTIF": 0, "HEDEFE_ULASTI": 1}
     liste = sorted(by.values(), key=lambda x: (rank[x["durum"]], -x["sEnd"]))[:3]
     for i, x in enumerate(liste):
         x["id"] = f"CRT{i + 1}"
-    aktif = next((x for x in liste if x["durum"] == "AKTIF"), None)
-    return {"durum": "AKTIF" if aktif else "HEDEFE_ULASTI" if liste else "YOK", "liste": liste, "aktif": aktif,
+    aktif = next((x for x in liste if x["durum"] in AKTIF_DURUM), None)
+    return {"durum": aktif["durum"] if aktif else "HEDEFE_ULASTI" if liste else "YOK", "liste": liste, "aktif": aktif,
             "aday": len(allc)}
 
 
@@ -663,14 +693,18 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
 
     # --- CRT: tanım ham 4H mumlarla baştan kontrol edilir
     k = [m for m in c4 if m["closed"]]
-    acik = [m for m in c4 if not m["closed"]]
+    acik = [m for m in c4 if not m["closed"]][-1:]
+    olusan = x["durum"] == "OLUSUYOR"
+    K = k + acik if olusan else k
     rng = [m for m in k if x["rStart"] <= m["t"] <= x["rEnd"]]
-    sw = [m for m in k if x["sStart"] <= m["t"] <= x["sEnd"]]
+    sw = [m for m in K if x["sStart"] <= m["t"] <= x["sEnd"]]
     add("CRT yönü bias ile aynı", "GECTI" if x["yon"] == bias["bias"] else "KALDI", x["yon"])
     if not rng or not sw or len(sw) != x["sN"] or len(rng) != x["rN"]:
-        add("CRT mumları kapanmış 4H verisinde", "KALDI", "Range/sweep mumları bulunamadı ya da kapanmamış")
+        add("CRT mumları 4H verisinde", "KALDI", "Range/sweep mumları bulunamadı")
         return bitir(L)
-    add("CRT mumları kapanmış 4H verisinde", "GECTI", f"{x['rN']} range + {x['sN']} sweep mumu")
+    if olusan and (sw[-1]["closed"] or sw[-1] is not acik[0]):
+        add("Oluşan sweep mumu = şu anki 4H mumu", "KALDI")
+    add("CRT mumları 4H verisinde", "GECTI", f"{x['rN']} range + {x['sN']} sweep mumu" + (" (sweep mumu oluşuyor, kapanış beklenmez)" if olusan else ""))
     ana = rng[0]
     rH, rL = ana["h"], ana["l"]
     disari = [m for m in rng[1:] if m["h"] > rH or m["l"] < rL]
@@ -678,7 +712,7 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
         f"{len(disari)} range mumu ana mumun dışına çıkmış (trend bacağı)" if disari else f"ana mum {rL} – {rH}")
     add("Range high/low ana mumdan", "GECTI" if (rH, rL) == (x["rH"], x["rL"]) else "KALDI",
         f"ajan {x['rL']} – {x['rH']}, ham {rL} – {rH}")
-    bitisik = k.index(sw[0]) == k.index(rng[-1]) + 1
+    bitisik = K.index(sw[0]) == K.index(rng[-1]) + 1
     if bull:
         sweep_ok = sw[0]["l"] < rL and all(m["c"] <= rL for m in sw[:-1])
         karsi = any(m["h"] > rH for m in sw)
@@ -691,11 +725,12 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     add("Sweep tek mum (range dışında kapanış yok)", "KALDI" if disarida and MAX_SWEEP == 1 else "GECTI",
         f"{len(disarida)} mum range dışında kapanmış: bu kırılımdır, CRT değil" if disarida else "")
     add("Sweep karşı ucu almadı", "KALDI" if karsi else "GECTI", "sweep mumu range'in iki ucunu da almış" if karsi else "")
-    add("Son sweep mumu range içinde kapandı", "GECTI" if icerde else "KALDI", f"kapanış {sw[-1]['c']}, range {rL} – {rH}")
+    add("Fiyat şu an range içinde (sweep mumu oluşuyor)" if olusan else "Son sweep mumu range içinde kapandı",
+        "GECTI" if icerde else "KALDI", f"{'fiyat' if olusan else 'kapanış'} {sw[-1]['c']}, range {rL} – {rH}")
     uc = min(m["l"] for m in sw) if bull else max(m["h"] for m in sw)
     sonra = [m for m in k if m["t"] > x["sEnd"]]
     bozuldu = next((m for m in sonra if ((m["c"] < uc) if bull else (m["c"] > uc))), None)
-    hedef = next((m for m in sonra + acik if ((m["h"] >= x["hedef"]) if bull else (m["l"] <= x["hedef"]))), None)
+    hedef = next((m for m in sonra + ([] if olusan else acik) if ((m["h"] >= x["hedef"]) if bull else (m["l"] <= x["hedef"]))), None)
     add("CRT hâlâ aktif (bozulmadı, hedefe gitmedi)", "KALDI" if bozuldu or hedef else "GECTI",
         "sweep ucunun ötesinde kapanış var" if bozuldu else "hedefe zaten ulaşıldı" if hedef else "")
     z = x.get("klSeviye")
@@ -899,7 +934,7 @@ def main():
         o["etiket"], o["oncelik"] = KAT[o["kat"]]
     now = int(time.time() * 1000)
     parcalar = [sonuc[i:i + PARCA] for i in range(0, len(sonuc), PARCA)]
-    ozet = {"zaman": now, "sure": round(time.time() - t0, 1), "kaynak": "Binance spot (data-api.binance.vision)",
+    ozet = {"zaman": now, "sure": round(time.time() - t0, 1), "kaynak": "Binance USDT-M vadeli (perpetual)" if VADELI else "Binance spot (data-api.binance.vision)",
             "parca": len(parcalar), "coinler": [temizle(o) for o, _ in sonuc]}
     for o in ozet["coinler"]:
         o["parca"] = (o["sira"] - 1) // PARCA

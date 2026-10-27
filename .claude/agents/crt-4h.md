@@ -26,6 +26,11 @@ Ham mumlara ihtiyaç olursa: `python3 .claude/skills/trade-ekibi/binance.py mum 
   - Range dışında KAPANAN mum sweep değil kırılımdır: o CRT biter, kırılım mumu yeni range olur.
   - Bearish: simetrik (Range_high üstüne çıkış, içeride kapanış).
   - Sweep mumları range'in KARŞI ucunu almaz; iki ucu da alan mum (outside bar) CRT değildir.
+- **Oluşan sweep (B modeli):** sweep, henüz kapanmamış 4H mumda da olabilir: range ucu alındı, karşı uç alınmadı ve
+  fiyat ŞU AN range içinde → durum `OLUSUYOR`; 4H kapanış beklenmeden 15m karakter değişimi aranır.
+- **İç içe CRT:** daha eski aktif bir CRT'nin range'i içinde kalan yeni CRT, o büyük CRT'nin iç hareketidir; ana CRT
+  büyük olandır (ör. ERA 26 Eki 00:00 range'i 0,07787 – 0,09349).
+- **Veri:** Binance USDT-M vadeli (perpetual) mumları; spot fiyatlar küçük coinlerde farklıdır.
 - **Dağıtım:** sweep'ten sonra hedef karşı uç (bullish → Range_high, bearish → Range_low).
 - Tipler: `klasik` (range tek mum + sweep mumu), `ic-mum` (ana mum + içindeki mumlar + sweep mumu).
 
