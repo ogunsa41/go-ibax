@@ -272,6 +272,34 @@ def ajan_bias_kapanis(W, price):
             "neden": [f"Son hafta: {neden} → {yon}"]}
 
 
+def ajan_bias_birlesik(W, price):
+    """ICT bias + mum kapanışı bias'ı birlikte.
+    ICT: önceki haftanın PPW'ye göre davranışı, haftalık yapı, premium/discount, bu hafta geçersizlik (ajan_bias).
+    Mum kapanışı: önceki haftanın high/low'una göre kapanış, ters kapanışa kadar yön korunur (ajan_bias_kapanis).
+    İkisi aynı yön → o yön, YUKSEK güven. Biri yön, diğeri NEUTRAL → yön veren, ORTA güven. Zıt → NEUTRAL."""
+    ict = ajan_bias(W, price)
+    kap = ajan_bias_kapanis(W, price)
+    a, b = ict["bias"], kap["bias"]
+    if a == b and a != "NEUTRAL":
+        yon, guven, durum = a, "YUKSEK", "ICT ve mum kapanışı aynı yön"
+    elif a == "NEUTRAL" and b != "NEUTRAL":
+        yon, guven, durum = b, "ORTA", "ICT nötr, mum kapanışı yön veriyor"
+    elif b == "NEUTRAL" and a != "NEUTRAL":
+        yon, guven, durum = a, "ORTA", "mum kapanışı nötr, ICT yön veriyor"
+    elif a == b == "NEUTRAL":
+        yon, guven, durum = "NEUTRAL", "DUSUK", "ikisi de nötr"
+    else:
+        yon, guven, durum = "NEUTRAL", "DUSUK", f"çelişki: ICT {a}, mum kapanışı {b}"
+    cw = [m for m in W if m["closed"]]
+    PW = cw[-1] if cw else None
+    return {"bias": yon, "guven": guven, "mod": "birlesik", "yapi": ict.get("yapi"),
+            "equilibrium": ict.get("equilibrium"), "konum": ict.get("konum"),
+            "hedef": _haftalik_hedef(cw, yon, price) if cw else None,
+            "gecersizlik": (PW["l"] if yon == "BULLISH" else PW["h"] if yon == "BEARISH" else None) if PW else None,
+            "ict": a, "kapanis": b,
+            "neden": [f"Birleşik: {durum}"] + [f"ICT: {n}" for n in ict.get("neden", [])] + [f"Kapanış: {n}" for n in kap.get("neden", [])]}
+
+
 def bias_sabit(W, price, yon):
     """Alternatif C: haftalık filtre yok; verilen yön için zincir çalışır."""
     cw = [m for m in W if m["closed"]]
@@ -289,7 +317,7 @@ def bias_listesi(mod, W, price, btc_w=None):
     if mod == "iki":
         return [bias_sabit(W, price, "BULLISH"), bias_sabit(W, price, "BEARISH")]
     return [{"sma": ajan_bias_sma, "ters": ajan_bias_ters, "choch": ajan_bias_choch,
-             "kapanis": ajan_bias_kapanis}.get(mod, ajan_bias)(W, price)]
+             "kapanis": ajan_bias_kapanis, "birlesik": ajan_bias_birlesik}.get(mod, ajan_bias)(W, price)]
 
 
 # ---------- 2 · 4H key level ----------
@@ -579,6 +607,11 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     cw = [m for m in W if m["closed"]]
     PW, PPW = cw[-1], cw[-2]
     bull = bias["bias"] == "BULLISH"
+    if bias.get("mod") == "birlesik":
+        a, b = ajan_bias(W, price)["bias"], ajan_bias_kapanis(W, price)["bias"]
+        beklenen = a if a == b else (b if a == "NEUTRAL" else a if b == "NEUTRAL" else "NEUTRAL")
+        add("Birleşik bias = ICT + mum kapanışı kuralı", "GECTI" if beklenen == bias["bias"] else "KALDI",
+            f"ICT {a}, kapanış {b} → {beklenen}")
     if bias.get("mod") == "kapanis":
         p2, p1 = cw[-2], cw[-1]
         beklenen = ("BULLISH" if p1["c"] > p2["h"] else "BEARISH" if p1["c"] < p2["l"] else
@@ -769,7 +802,7 @@ def analiz(sembol):
     c4 = mumlar(sembol, "4h", 300)
     m15 = mumlar(sembol, "15m", 1000)
     price = m15[-1]["c"]
-    bias = ajan_bias_kapanis(W, price)
+    bias = ajan_bias_birlesik(W, price)
     kl = ajan_kl(c4, W, bias["bias"], price)
     crt = ajan_crt(c4, bias["bias"], kl, W=W)
     ch = ajan_choch(m15, crt)

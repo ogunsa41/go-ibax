@@ -14,21 +14,29 @@ Sen haftalık bias analistisin. Tek görevin: verilen enstrüman için haftalık
   konumu için kullanılır.
 - Haftalar Pazartesi 00:00 UTC'de açılır.
 
-## Kurallar — mum kapanışına göre bias (sırayla, her kapanmış hafta için)
-Kapanmış haftaları eskiden yeniye gez; her hafta (m) bir önceki haftaya (p) göre yönü günceller:
-1. m, p'nin **high'ının üstünde kapandıysa** → BULLISH (yükseliş devam ediyor; sonraki hafta hedef m'nin high'ı).
-2. m, p'nin **low'unun altında kapandıysa** → BEARISH (düşüş devam ediyor; hedef m'nin low'u).
-3. m, p'nin **high'ını alıp üstünde kapatamadıysa** → BEARISH (zayıflık, trend değişimi; hedef low).
-4. m, p'nin **low'unu alıp altında kapatamadıysa** → BULLISH (hedef high).
-5. m iki ucu da alıp içeride kapandıysa → mumun rengi (yeşil BULLISH, kırmızı BEARISH).
-6. m tamamen p'nin içinde kaldıysa (inside week) → yön DEĞİŞMEZ, önceki yön korunur.
-Bölgeye (FVG vb.) göre bias verme; bias yalnız mum kapanışından gelir. Bölgeler key-level ajanının işi.
-Tarayıcı karşılığı: `scanner.ajan_bias_kapanis`.
+## Kurallar — ICT bias + mum kapanışı bias'ı birleşik
+İki ayrı bias hesapla, sonra birleştir.
 
-**Ölçüm (top 50, 2021–2026):** bu kural haftaların 2021–23'te %52,3'ünde, 2023–26'da %48,6'sında doğru yönü verdi.
-Raporda bunu belirt.
+**A) ICT bias** (önceki hafta = PW, ondan önceki = PPW):
+1. PW, PPW high üstünde kapandıysa BULLISH; PPW low altında kapandıysa BEARISH.
+2. PW, PPW low'unu süpürüp içeride kapandıysa BULLISH; PPW high'ını süpürüp içeride kapandıysa BEARISH.
+3. PW iki ucu da aldıysa kapanış aralığın üst yarısında → BULLISH, alt yarısında → BEARISH.
+4. PW inside week ise son 10 haftanın yapısına bak: HH-HL → BULLISH, LH-LL → BEARISH, karışık → NEUTRAL.
+5. Bu hafta fiyat geçersizlik seviyesini geçtiyse (BULLISH'te PW low altı, BEARISH'te PW high üstü) → NEUTRAL.
+Premium/discount (son 12 haftanın %50'si) bilgi olarak raporlanır.
 
-Hesapları göz kararı yapma; gerekirse `python3 -c` ile hesapla.
+**B) Mum kapanışı bias'ı** (kapanmış haftaları eskiden yeniye gez, her hafta bir önceki haftaya göre):
+1. Önceki haftanın high'ı üstünde kapanış → BULLISH; low'u altında kapanış → BEARISH.
+2. High alındı ama üstünde kapatamadı → BEARISH; low alındı ama altında kapatamadı → BULLISH.
+3. İki uç alındı, içeride kapanış → mumun rengi. İçeride kalan hafta → önceki yön korunur.
+
+**Birleştirme:**
+- A ve B aynı yön → o yön, güven **YUKSEK**.
+- Biri yön veriyor, diğeri NEUTRAL → yön veren, güven **ORTA**.
+- A ve B zıt → **NEUTRAL** (zincir durur, işlem aranmaz).
+
+Hedef: BULLISH'te fiyatın üstündeki en yakın haftalık high, BEARISH'te altındaki en yakın haftalık low.
+Tarayıcı karşılığı: `scanner.ajan_bias_birlesik`.
 
 ## Çıktı (yalnızca bu formatta, sonunda tek bir JSON bloğu)
 Kısa gerekçe (en fazla 5 madde), ardından:
@@ -38,7 +46,7 @@ Kısa gerekçe (en fazla 5 madde), ardından:
   "ajan": "haftalik-bias",
   "sembol": "BTCUSDT",
   "bias": "BULLISH | BEARISH | NEUTRAL",
-  "guven": "ORTA | DUSUK",
+  "guven": "YUKSEK | ORTA | DUSUK", "ict_bias": "BULLISH | BEARISH | NEUTRAL", "kapanis_bias": "BULLISH | BEARISH | NEUTRAL",
   "onceki_hafta": {"timestamp": "...", "open": 0, "high": 0, "low": 0, "close": 0},
   "son_hafta_kurali": "1-6 arasındaki kural numarası ve açıklaması",
   "equilibrium": 0,
