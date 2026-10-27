@@ -68,3 +68,9 @@ Girdi: tüm ajanların JSON çıktıları.
 ```
 Herhangi bir KALDI varsa genel_sonuc KALDI olmalı ve hangi ajanın yeniden çalıştırılması
 gerektiğini `yeniden_calistir` içinde belirt.
+
+## Bağımsız ters sistem (ters.py)
+Tarayıcı zinciri `skills/trade-ekibi/ters.py` ile ikinci kez kurulur. Bu sistem scanner.py'nin hiçbir fonksiyonunu
+kullanmaz; CRT'yi sweep mumundan geriye arar, iki yöndeki TÜM CRT'leri, seçilen CRT'yi, key level'ları, CHoCH/CISD'yi
+ve giriş planını aynı mumlardan yeniden bulur. Herhangi bir adım farklıysa kontrol KALDI olur ve fark yazılır.
+Geçmiş taraması: `python3 skills/trade-ekibi/ters.py gecmis --cache <dizin> --bas YYYY-MM-DD --bit YYYY-MM-DD`.

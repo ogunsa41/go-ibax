@@ -185,6 +185,8 @@ def coin_test(args):
             ch = sc.ajan_choch(k15, crt)
             en = sc.ajan_giris(ch, crt, bias, price)
             qa = sc.ajan_kontrol(w, k4, bias, kl, crt, ch, en, price)
+            if bias_mod == "ters":
+                qa = sc.ters_kontrol(qa, w, k4, k15, Tn)
             kat = sc.sinifla(bias, kl, crt, ch, en, qa)
             sayac[kat] = sayac.get(kat, 0) + 1
             if ch.get("durum") == "ONAYLANDI" and qa["genel"] != "KALDI" and ch["brkT"] == k15[-1]["t"]:

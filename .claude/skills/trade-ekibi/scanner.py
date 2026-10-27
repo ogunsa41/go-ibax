@@ -766,6 +766,18 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     return bitir(L)
 
 
+def ters_kontrol(qa, W, c4, m15, simdi):
+    """Kontrolcünün bağımsız ayağı: zinciri ters.py (scanner fonksiyonlarını kullanmayan, CRT'yi sweep mumundan
+    geriye arayan ikinci sistem) ile aynı mumlardan yeniden kurar. Fark varsa hangi adımda olduğu yazılır."""
+    import ters
+    fark, _, _ = ters.karsilastir(W, c4, m15, simdi, sys.modules[__name__])
+    L = qa["list"] + [{"k": f"Bağımsız ters sistem: {t}", "s": "KALDI", "d": d[:300]} for t, d in fark]
+    if not fark:
+        L.append({"k": "Bağımsız ters sistem aynı sonucu buldu", "s": "GECTI",
+                  "d": "bias, key level, iki yönde tüm CRT'ler, seçilen CRT, CHoCH/CISD ve giriş"})
+    return bitir(L)
+
+
 def bitir(L):
     g = "KALDI" if any(c["s"] == "KALDI" for c in L) else "UYARI" if any(c["s"] == "UYARI" for c in L) else "GECTI"
     return {"genel": g, "list": L}
@@ -837,6 +849,7 @@ def analiz(sembol):
     ch = ajan_choch(m15, crt)
     en = ajan_giris(ch, crt, bias, price)
     qa = ajan_kontrol(W, c4, bias, kl, crt, ch, en, price)
+    qa = ters_kontrol(qa, W, c4, m15, int(time.time() * 1000))
     kat = sinifla(bias, kl, crt, ch, en, qa)
     ozet = {"s": sembol, "kat": kat, "fiyat": price, "bias": bias["bias"], "guven": bias["guven"],
             "qa": qa["genel"], "crt": crt["durum"], "choch": ch.get("durum"), "giris": en.get("durum")}
