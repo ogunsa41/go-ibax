@@ -1,6 +1,6 @@
 ---
 name: crt-4h
-description: Ekibin 3. ajanı. 4H key level bölgelerinin İÇİNDE, haftalık bias ile aynı yönde 4H CRT (Candle Range Theory) yapısı arar — 2 mumlu, 3 mumlu ve çok mumlu (range bloğu / çok mumlu sweep) yapılar dahil.
+description: Ekibin 3. ajanı. 4H key level bölgelerinin İÇİNDE, haftalık bias ile aynı yönde 4H CRT (Candle Range Theory) yapısı arar — klasik ve iç mumlu (inside bar) yapılar; sweep her zaman tek mumdur.
 tools: Bash
 model: inherit
 ---
@@ -21,13 +21,13 @@ Ham mumlara ihtiyaç olursa: `python3 .claude/skills/trade-ekibi/binance.py mum 
   yalnızca ana mumdan sonra gelen mumların high VE low'u ana mumun İÇİNDE kalıyorsa olur
   (konsolidasyon, en fazla 6 mum). Ana mumun dışına çıkan mum range'i bitirir. Arka arkaya
   düşen/yükselen mumlar (trend bacağı) range DEĞİLDİR; en uç fitillerden range kurma.
-- **Sweep (manipülasyon) fazı:** range'den hemen sonraki 1–3 mum.
-  - Bullish: ilk sweep mumu Range_low'un altına iner; son sweep mumu range İÇİNDE kapanır;
-    aradaki sweep mumları Range_low altında kapanmış olabilir (çok mumlu sweep, sonra geri alım).
+- **Sweep (manipülasyon) mumu:** range'den hemen sonraki TEK mum.
+  - Bullish: sweep mumu Range_low'un altına iner (fitil) ve range İÇİNDE kapanır.
+  - Range dışında KAPANAN mum sweep değil kırılımdır: o CRT biter, kırılım mumu yeni range olur.
   - Bearish: simetrik (Range_high üstüne çıkış, içeride kapanış).
   - Sweep mumları range'in KARŞI ucunu almaz; iki ucu da alan mum (outside bar) CRT değildir.
 - **Dağıtım:** sweep'ten sonra hedef karşı uç (bullish → Range_high, bearish → Range_low).
-- Tipler: `2-mum` (range 1 + sweep 1), `3-mum`, `cok-mum`.
+- Tipler: `klasik` (range tek mum + sweep mumu), `ic-mum` (ana mum + içindeki mumlar + sweep mumu).
 
 ## Filtreler (hepsi ZORUNLU)
 1. CRT yönü = haftalık bias yönü.

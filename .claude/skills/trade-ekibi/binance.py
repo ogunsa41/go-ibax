@@ -4,7 +4,7 @@
 Kullanım:
   python3 binance.py mum  SEMBOL ARALIK [LIMIT] [--futures]
   python3 binance.py crt  SEMBOL ARALIK [LIMIT] [--futures] [--yon BULLISH|BEARISH]
-                          [--max-range 6] [--max-sweep 3] [--son 12] [--hepsi]
+                          [--max-range 6] [--max-sweep 1] [--son 12] [--hepsi]
 
 SEMBOL Binance formatındadır (BTCUSDT). ARALIK: 1w, 1d, 4h, 1h, 15m, 5m ...
 Çıktı JSON'dur; mumlar ESKİDEN YENİYE sıralıdır ve her mumda "kapali" alanı vardır.
@@ -49,7 +49,7 @@ def klines(sembol, aralik, limit=200, futures=False):
     return mumlar
 
 
-def crt_tara(mumlar, yon=None, max_range=6, max_sweep=3, son_n=None, hepsi=False):
+def crt_tara(mumlar, yon=None, max_range=6, max_sweep=1, son_n=None, hepsi=False):
     """Kapanmış mumlarda 2 mumlu, 3 mumlu ve çok mumlu CRT yapılarını bulur.
 
     Range: bir ana mum ve (çok mumluysa) onu izleyen, ana mumun high/low'u İÇİNDE kalan mumlar
@@ -111,7 +111,7 @@ def crt_tara(mumlar, yon=None, max_range=6, max_sweep=3, son_n=None, hepsi=False
                         continue
                     sonuc.append({
                         "yon": y,
-                        "tip": f"{r_uzun + s_uzun}-mum" if r_uzun + s_uzun <= 3 else "cok-mum",
+                        "tip": ("klasik" if r_uzun == 1 else "ic-mum") if s_uzun == 1 else "cok-mum-sweep",
                         "range_mum_sayisi": r_uzun,
                         "sweep_mum_sayisi": s_uzun,
                         "range_bas": rng[0]["timestamp"],
@@ -137,7 +137,7 @@ def main():
     p.add_argument("--futures", action="store_true")
     p.add_argument("--yon", choices=["BULLISH", "BEARISH"])
     p.add_argument("--max-range", type=int, default=6)
-    p.add_argument("--max-sweep", type=int, default=3)
+    p.add_argument("--max-sweep", type=int, default=1)
     p.add_argument("--son", type=int, default=12, help="sweep son N kapanmış mumda bitmeli")
     p.add_argument("--hepsi", action="store_true", help="GECERSIZ yapıları da göster")
     a = p.parse_args()

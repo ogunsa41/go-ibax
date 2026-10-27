@@ -33,7 +33,7 @@ Girdi: tüm ajanların JSON çıktıları.
       - Range high/low = ana mumun high/low'u (en uç fitiller değil).
       - İlk sweep mumu range ucunu almış, sweep mumları karşı ucu almamış, son sweep mumu range içinde kapanmış.
       - Sweep ucu ilgili KL'ye değiyor.
-- [ ] CRT mumlarının hepsi kapanmış; range ile sweep bitişik; aradaki sweep mumları range dışında kapanmış.
+- [ ] CRT mumlarının hepsi kapanmış; range ile sweep bitişik; sweep TEK mum (range dışında kapanan mum varsa KALDI: kırılımdır, CRT değil).
 - [ ] CRT'nin eşleştiği key level sweep'ten ÖNCE oluşmuş ve sweep fitili ona gerçekten değmiş.
 - [ ] CRT durumu (AKTIF/HEDEFE_ULASTI/GECERSIZ) sonraki mumlarla tutarlı. Henüz kapanmamış 4H mumun
       fitili hedefe değdiyse "AKTIF" denmesi hatadır (KALDI).

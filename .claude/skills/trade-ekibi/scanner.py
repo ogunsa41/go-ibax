@@ -384,7 +384,15 @@ def ajan_kl(c4, W, bias, price, now_ms=None):
 
 
 # ---------- 3 · 4H CRT ----------
-def crt_scan(c4, yon, max_r=6, max_s=3, son_n=12):
+MAX_SWEEP = 1  # sweep tek mumdur: range dışında KAPANAN mum kırılımdır (CRT değil), yeni range o mum olur
+
+
+def crt_tara_tip(r):
+    return "klasik" if r == 1 else "ic-mum"
+
+
+def crt_scan(c4, yon, max_r=6, max_s=None, son_n=12):
+    max_s = max_s or MAX_SWEEP
     k = [m for m in c4 if m["closed"]]
     acik = [m for m in c4 if not m["closed"]][-1:]  # henüz kapanmamış mum: yalnız hedefe değme (fitil) için
     out = []
@@ -424,7 +432,7 @@ def crt_scan(c4, yon, max_r=6, max_s=3, son_n=12):
                     durum = "HEDEFE_ULASTI"
                 else:
                     durum = "AKTIF"
-                out.append({"yon": yon, "tip": f"{r + s}-mum" if r + s <= 3 else "cok-mum", "rN": r, "sN": s,
+                out.append({"yon": yon, "tip": crt_tara_tip(r) if s == 1 else "cok-mum-sweep", "rN": r, "sN": s,
                             "rStart": rng[0]["t"], "rEnd": rng[-1]["t"], "rH": rH, "rL": rL,
                             "sStart": sw[0]["t"], "sEnd": last["t"],
                             "swHi": max(m["h"] for m in sw), "swLo": min(m["l"] for m in sw),
@@ -671,6 +679,9 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
         karsi = any(m["l"] < rL for m in sw)
     icerde = rL < sw[-1]["c"] < rH
     add("Sweep range ucunu aldı", "GECTI" if sweep_ok and bitisik else "KALDI")
+    disarida = [m for m in sw[:-1]]
+    add("Sweep tek mum (range dışında kapanış yok)", "KALDI" if disarida and MAX_SWEEP == 1 else "GECTI",
+        f"{len(disarida)} mum range dışında kapanmış: bu kırılımdır, CRT değil" if disarida else "")
     add("Sweep karşı ucu almadı", "KALDI" if karsi else "GECTI", "sweep mumu range'in iki ucunu da almış" if karsi else "")
     add("Son sweep mumu range içinde kapandı", "GECTI" if icerde else "KALDI", f"kapanış {sw[-1]['c']}, range {rL} – {rH}")
     uc = min(m["l"] for m in sw) if bull else max(m["h"] for m in sw)
