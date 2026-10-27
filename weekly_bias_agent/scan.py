@@ -5,16 +5,15 @@
    staked türevleri ele, Binance'te USDT paritesi olanlardan ilk N'i seçer
    (CoinGecko'ya ulaşılamazsa Binance 24s USDT hacmine göre sıralar).
 2. Listeyi reports/top50_<tarih>.csv olarak kaydeder.
-3. Her coin için agent.analyze ile bu haftanın bias'ını ve walk-forward backtestini
-   hesaplar, tek bir özet tablo (Markdown + HTML + CSV) üretir.
+3. Her coin için agent.analyze'ı iki modda çalıştırır: yön bias'ı (long/short) ve işlem
+   modu (yalnız long + volatilite hedefi). Tek bir özet tablo (Markdown + CSV) üretir.
 
 Kullanım:
     python3 scan.py
-    python3 scan.py --top 30 --long-only
+    python3 scan.py --top 30 --vol-target 0.4
 """
 import argparse
 import json
-import math
 import time
 import urllib.error
 import urllib.request
@@ -102,15 +101,21 @@ def top_coins(n, cache_dir):
     return df, "Binance 24s USDT hacmi"
 
 
-def fmt_pct(x):
-    return "—" if x is None or (isinstance(x, float) and math.isnan(x)) else f"{x * 100:+.1f}%"
+def summarize(res, enough):
+    ag, bh = res["agent_stats"], res["bh_stats"]
+    g = lambda d, k: d.get(k) if enough else None
+    return {"signal": res["signal"], "rule": res["rule"] or "-", "size": res["size"],
+            "ret": g(ag, "total_return"), "sharpe": g(ag, "sharpe"), "dd": g(ag, "max_dd"),
+            "psr": g(ag, "psr"), "bh_ret": g(bh, "total_return"), "bh_sharpe": g(bh, "sharpe"),
+            "bh_dd": g(bh, "max_dd"), "dsr": res["dsr"] if enough else None}
 
 
 def main():
     ap = argparse.ArgumentParser(description="Top N coin için haftalık bias taraması")
     ap.add_argument("--top", type=int, default=50)
     ap.add_argument("--fee", type=float, default=0.001)
-    ap.add_argument("--long-only", action="store_true")
+    ap.add_argument("--vol-target", type=float, default=0.5,
+                    help="işlem modu için yıllık hedef volatilite (0 = kapalı)")
     ap.add_argument("--min-train", type=int, default=52)
     ap.add_argument("--min-active", type=int, default=20)
     ap.add_argument("--out", default=str(Path(__file__).parent / "reports"))
@@ -129,64 +134,83 @@ def main():
         row = {"rank": c.rank, "symbol": c.symbol, "pair": c.pair}
         try:
             daily = agent.fetch_binance(c.pair)
-            res = agent.analyze(daily, a.fee, a.long_only, a.min_train, a.min_active)
-            weeks = len(res["w"])
+            # Yön bias'ı: long/short, sabit pozisyon
+            bias = agent.analyze(daily, a.fee, False, a.min_train, a.min_active)
+            # İşlem modu: yalnız long + volatilite hedefi (kripto pozitif drift, short likidasyon riski)
+            trade = agent.analyze(daily, a.fee, True, a.min_train, a.min_active,
+                                  vol_target=a.vol_target or None)
+            weeks = len(bias["w"])
             enough = weeks >= a.min_train + 26
-            week = res["week"]
-            ag, bh = res["agent_stats"], res["bh_stats"]
-            row.update({
-                "bias": res["signal"], "rule": res["rule"] or "-",
-                "rule_sharpe": res["rule_sharpe"], "weeks": weeks,
-                "agent_return": ag.get("total_return") if enough else None,
-                "bh_return": bh.get("total_return") if enough else None,
-                "agent_sharpe": ag.get("sharpe") if enough else None,
-                "bh_sharpe": bh.get("sharpe") if enough else None,
-                "agent_max_dd": ag.get("max_dd") if enough else None,
-                "hit_rate": ag.get("hit_rate") if enough else None,
-                "t_stat": ag.get("t_stat") if enough else None,
-                "note": "" if enough else "yetersiz geçmiş, backtest yok",
-            })
+            week = bias["week"]
+            row.update({"weeks": weeks, "note": "" if enough else "yetersiz geçmiş, backtest yok"})
+            row.update({f"bias_{k}": v for k, v in summarize(bias, enough).items()})
+            row.update({f"trade_{k}": v for k, v in summarize(trade, enough).items()})
         except Exception as e:
-            row.update({"bias": None, "note": f"hata: {e}"})
+            row.update({"bias_signal": None, "note": f"hata: {e}"})
         results.append(row)
-        b = BIAS_TXT.get(row.get("bias"), "?")
-        print(f"{c.rank:>2}. {c.symbol:<8} {b:<9} {row.get('rule', '')} {row.get('note', '')}")
+        print(f"{c.rank:>2}. {c.symbol:<8} {BIAS_TXT.get(row.get('bias_signal'), '?'):<9} "
+              f"{row.get('bias_rule', '')} | işlem: {row.get('trade_size', 0) or 0:.2f}x "
+              f"{row.get('note', '')}")
         time.sleep(0.2)
 
     df = pd.DataFrame(results)
     df.to_csv(out / f"scan_{stamp}.csv", index=False)
 
-    counts = df["bias"].map(BIAS_TXT).value_counts()
-    beat = df.dropna(subset=["agent_sharpe"])
-    n_beat = int((beat["agent_sharpe"] > beat["bh_sharpe"]).sum())
-    signif = int((beat["t_stat"].abs() >= 2).sum())
+    counts = df["bias_signal"].map(BIAS_TXT).value_counts()
+    bt = df.dropna(subset=["bias_sharpe"])
+    longs = df[(df["trade_size"].fillna(0) > 0)]
+
+    def beat(mode):
+        return int((bt[f"{mode}_sharpe"] > bt[f"{mode}_bh_sharpe"]).sum())
+
+    def signif(mode):
+        return int((bt[f"{mode}_psr"] >= 0.95).sum())
+
+    def num(r, k, f="{:.2f}"):
+        v = r.get(k)
+        return "—" if v is None or pd.isna(v) else f.format(v)
+
+    def p(r, k):
+        v = r.get(k)
+        return "—" if v is None or pd.isna(v) else f"{v * 100:+.0f}%"
+
     md = [
         f"# Top {len(df)} Haftalık Bias Taraması — {week.date() if week is not None else stamp} haftası",
         "",
         f"Liste: {basis} (stablecoin/wrapped hariç, Binance USDT paritesi olanlar). "
-        f"Maliyet {a.fee * 100:.2f}%/değişim, {'yalnız long' if a.long_only else 'long/short'}, "
-        f"walk-forward ısınma {a.min_train} hafta.",
+        f"Maliyet {a.fee * 100:.2f}%/değişim, walk-forward ısınma {a.min_train} hafta, "
+        f"{len(agent.RULE_SOURCES)} aday kural.",
         "",
-        "**Dağılım:** " + ", ".join(f"{k}: {v}" for k, v in counts.items()),
+        "İki mod çalıştırılır:",
+        "- **Yön bias'ı (L/S):** kurallar long ve short serbest, sabit 1x pozisyon.",
+        f"- **İşlem modu:** yalnız long, yıllık %{a.vol_target * 100:.0f} volatilite hedefi "
+        "(pozisyon = hedef vol / son 12 haftanın volü, en fazla 1x).",
         "",
-        f"Backtesti olan {len(beat)} coinin {n_beat} tanesinde ajan Sharpe'ı buy & hold'u geçti; "
-        f"{signif} tanesinde |t-stat| ≥ 2.",
+        "**Yön bias'ı dağılımı:** " + ", ".join(f"{k}: {v}" for k, v in counts.items()),
         "",
-        "| # | Coin | Bu hafta | Kural | Kural Sharpe | Hafta | Ajan getiri | B&H getiri | "
-        "Ajan Sharpe | B&H Sharpe | Ajan Max DD | İsabet | t-stat | Not |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        f"**Bu hafta işlem modunda long önerilenler ({len(longs)}):** " +
+        (", ".join(f"{r.symbol} ({r.trade_size:.2f}x)" for r in longs.itertuples()) or "yok"),
+        "",
+        f"Backtesti olan {len(bt)} coinde Sharpe'ı buy & hold'u geçen: L/S {beat('bias')}, "
+        f"işlem modu {beat('trade')}. PSR ≥ %95 olan: L/S {signif('bias')}, "
+        f"işlem modu {signif('trade')}.",
+        "",
+        "| # | Coin | Yön bias'ı | Kural | İşlem | Hafta | L/S getiri | L/S SR | L/S DD | "
+        "İşlem getiri | İşlem SR | İşlem DD | İşlem PSR | B&H getiri | B&H SR | B&H DD | Not |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
-        num = lambda k, f="{:.2f}": "—" if r.get(k) is None or pd.isna(r.get(k)) else f.format(r[k])
+        size = r.get("trade_size") or 0
         md.append(
-            f"| {r['rank']} | {r['symbol']} | {BIAS_TXT.get(r.get('bias'), '?')} | "
-            f"`{r.get('rule', '-')}` | {num('rule_sharpe')} | {r.get('weeks', '—')} | "
-            f"{fmt_pct(r.get('agent_return'))} | {fmt_pct(r.get('bh_return'))} | "
-            f"{num('agent_sharpe')} | {num('bh_sharpe')} | {fmt_pct(r.get('agent_max_dd'))} | "
-            f"{fmt_pct(r.get('hit_rate'))} | {num('t_stat')} | {r.get('note', '')} |")
-    md += ["", "> Kural Sharpe = seçilen kuralın tüm geçmişteki Sharpe'ı (örneklem içi). "
-           "Ajan/B&H sütunları walk-forward örneklem dışı sonuçlardır. |t-stat| < 2 anlamlı "
-           "sayılmaz. Yatırım tavsiyesi değildir."]
+            f"| {r['rank']} | {r['symbol']} | {BIAS_TXT.get(r.get('bias_signal'), '?')} | "
+            f"`{r.get('bias_rule', '-')}` | {'LONG ' + format(size, '.2f') + 'x' if size > 0 else '—'} | "
+            f"{r.get('weeks', '—')} | {p(r, 'bias_ret')} | {num(r, 'bias_sharpe')} | "
+            f"{p(r, 'bias_dd')} | {p(r, 'trade_ret')} | {num(r, 'trade_sharpe')} | "
+            f"{p(r, 'trade_dd')} | {p(r, 'trade_psr').lstrip('+')} | {p(r, 'bias_bh_ret')} | "
+            f"{num(r, 'bias_bh_sharpe')} | {p(r, 'bias_bh_dd')} | {r.get('note', '')} |")
+    md += ["", "> Tüm getiri/SR/DD sütunları walk-forward örneklem dışı sonuçlardır. "
+           "PSR = gerçek Sharpe'ın 0'dan büyük olma olasılığı; < %95 anlamlı sayılmaz. "
+           "Fonlama ücreti ve kayma dahil değildir. Yatırım tavsiyesi değildir."]
     md_text = "\n".join(md)
     (out / f"scan_{stamp}.md").write_text(md_text)
     print("\n" + md_text)
