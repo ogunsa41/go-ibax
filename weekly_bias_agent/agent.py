@@ -382,6 +382,76 @@ def bias_accuracy(pos, ret, recent=52):
     return out
 
 
+def weekly_atr(w, length=14):
+    """Haftalık ATR; t haftası için yalnızca t-1'e kadarki haftalar kullanılır."""
+    pc = w["close"].shift(1)
+    tr = pd.concat([w["high"] - w["low"], (w["high"] - pc).abs(), (w["low"] - pc).abs()],
+                   axis=1).max(axis=1)
+    return tr.rolling(length).mean().shift(1)
+
+
+def rr_trade(days, direction, entry, dist, rr):
+    """Tek haftalık işlem: stop = 1R, TP = rr·R. Günlük mumlarla hangisinin önce değdiğine
+    bakılır; aynı gün ikisi de değerse stop sayılır (ihtiyatlı). Hiçbiri değmezse hafta
+    kapanışında çıkılır. Dönüş: (R sonucu, 'tp' | 'sl' | 'close')."""
+    stop = entry - direction * dist
+    tp = entry + direction * rr * dist
+    for hi, lo in zip(days["high"].values, days["low"].values):
+        hit_sl = lo <= stop if direction > 0 else hi >= stop
+        hit_tp = hi >= tp if direction > 0 else lo <= tp
+        if hit_sl:
+            return -1.0, "sl"
+        if hit_tp:
+            return float(rr), "tp"
+    return float(direction * (days["close"].iloc[-1] - entry) / dist), "close"
+
+
+def rr_backtest(daily, w, direction, stop_atr=0.5, rr=2.0, fee=0.001, risk=0.01,
+                atr_len=14):
+    """Ajanın haftalık bias yönüyle TP = rr·R / SL = 1R backtesti.
+
+    R = stop mesafesi = stop_atr × haftalık ATR. Komisyon (giriş + çıkış) R cinsinden düşülür.
+    Sermaye her işlemde `risk` oranında riske edilir (1R kayıp = sermayenin %1'i).
+    """
+    atr = weekly_atr(w, atr_len)
+    wk = (daily.index - pd.to_timedelta(daily.index.dayofweek, unit="D")).normalize()
+    groups = {k: g for k, g in daily.groupby(wk)}
+    rows = []
+    for t, d in direction.items():
+        d = int(np.sign(d))
+        if d == 0 or not atr.get(t, np.nan) > 0 or t not in groups:
+            continue
+        entry = w.at[t, "open"]
+        dist = stop_atr * atr[t]
+        r, how = rr_trade(groups[t], d, entry, dist, rr)
+        r -= 2 * fee * entry / dist
+        rows.append({"week": t, "dir": d, "r": r, "exit": how, "stop_pct": dist / entry})
+    tr = pd.DataFrame(rows)
+    if tr.empty:
+        return tr, {"trades": 0}
+    eq = (1 + risk * tr["r"]).cumprod()
+    cum_r = tr["r"].cumsum()
+    years = (tr["week"].iloc[-1] - tr["week"].iloc[0]).days / 365.25 or 1
+    n = len(tr)
+    summary = {
+        "trades": n,
+        "tp_rate": float((tr["exit"] == "tp").mean()),
+        "sl_rate": float((tr["exit"] == "sl").mean()),
+        "close_rate": float((tr["exit"] == "close").mean()),
+        "win_rate": float((tr["r"] > 0).mean()),
+        "avg_r": float(tr["r"].mean()),
+        "total_r": float(cum_r.iloc[-1]),
+        "max_dd_r": float((cum_r - cum_r.cummax()).min()),
+        "t_stat": float(tr["r"].mean() / tr["r"].std() * math.sqrt(n)) if n > 2 and tr["r"].std() > 0 else 0.0,
+        "equity_return": float(eq.iloc[-1] - 1),
+        "cagr": float(eq.iloc[-1] ** (1 / years) - 1) if eq.iloc[-1] > 0 else -1.0,
+        "max_dd": float((eq / eq.cummax() - 1).min()),
+        "avg_stop_pct": float(tr["stop_pct"].mean()),
+        "breakeven_win_rate": 1 / (1 + rr),
+    }
+    return tr, summary
+
+
 def weekday_profile(daily):
     r = (daily["close"] / daily["open"] - 1).to_frame("ret")
     r["day"] = r.index.day_name()
@@ -433,6 +503,16 @@ def pct(x):
     return "—" if x is None or (isinstance(x, float) and math.isnan(x)) else f"{x * 100:.2f}%"
 
 
+def rr_text(s):
+    if not s.get("trades"):
+        return "İşlem yok."
+    return (f"| İşlem | TP | SL | Hafta sonu çıkış | Kazanan | Ort. R | Toplam R | Max DD (R) | "
+            f"t-stat | %1 riskle getiri | Max DD | Ort. stop |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n"
+            f"| {s['trades']} | {pct(s['tp_rate'])} | {pct(s['sl_rate'])} | {pct(s['close_rate'])} | "
+            f"{pct(s['win_rate'])} | {s['avg_r']:+.3f} | {s['total_r']:+.1f} | {s['max_dd_r']:.1f} | "
+            f"{s['t_stat']:.2f} | {pct(s['equity_return'])} | {pct(s['max_dd'])} | {pct(s['avg_stop_pct'])} |")
+
+
 def stats_row(name, s):
     return (f"| {name} | {s['active_weeks']}/{s['weeks']} | {pct(s['hit_rate'])} | "
             f"{pct(s['avg_week'])} | {pct(s['total_return'])} | {pct(s['cagr'])} | "
@@ -474,6 +554,8 @@ def main():
                     help="kural seçiminde bakılacak hafta (0 = tüm geçmiş)")
     ap.add_argument("--min-train", type=int, default=52, help="walk-forward ısınma süresi (hafta)")
     ap.add_argument("--min-active", type=int, default=20, help="kural seçimi için min. aktif hafta")
+    ap.add_argument("--rr", type=float, default=2.0, help="TP = rr × R (stop = 1R)")
+    ap.add_argument("--stop-atr", type=float, default=0.5, help="R = stop mesafesi = k × haftalık ATR")
     ap.add_argument("--out", default=str(Path(__file__).parent / "reports"))
     a = ap.parse_args()
 
@@ -487,6 +569,7 @@ def main():
     label = {1: "LONG (yükseliş) 🟢", -1: "SHORT (düşüş) 🔴", 0: "NÖTR ⚪"}[signal]
     wd = weekday_profile(daily)
     picks = res["picks"]
+    rr_trades, rr_sum = rr_backtest(daily, w, pos.iloc[oos], a.stop_atr, a.rr, a.fee)
     now = pd.Timestamp.now(tz="UTC")
 
     out = Path(a.out)
@@ -527,6 +610,13 @@ def main():
         HDR, *[stats_row(k, tr) for k, tr, _ in rule_tbl], "",
         f"## Aday kurallar — test (son %30, {w.index[split].date()}→{w.index[-1].date()})",
         HDR, *[stats_row(k, te) for k, _, te in rule_tbl], "",
+        f"## TP = {a.rr:g}R / SL = 1R backtesti (R = {a.stop_atr:g} × haftalık ATR)",
+        "Ajanın örneklem dışı bias yönünde haftanın açılışında giriş; günlük mumlarla önce "
+        "değen seviye (aynı gün ikisi de değerse stop), hiçbiri değmezse hafta kapanışında çıkış. "
+        f"Başa baş isabet %{100 / (1 + a.rr):.1f}.",
+        "",
+        rr_text(rr_sum),
+        "",
         "## Gün bazlı profil (günlük açılış→kapanış, UTC)",
         "| Gün | Ort. getiri | İsabet | t-stat | n |\n|---|---|---|---|---|",
         *[f"| {d} | {pct(r.avg)} | {pct(r.hit_rate)} | {r.t_stat:.2f} | {int(r.n)} |"

@@ -203,6 +203,48 @@ class TestBiasAccuracy(unittest.TestCase):
         self.assertAlmostEqual(hi, 0.5962, places=3)
 
 
+class TestRiskReward(unittest.TestCase):
+    def days(self, rows):
+        idx = pd.date_range("2024-01-01", periods=len(rows), freq="D", tz="UTC")
+        return pd.DataFrame(rows, columns=["high", "low", "close"], index=idx)
+
+    def test_tp_first(self):
+        d = self.days([[101, 99, 100], [121, 100, 120]])
+        self.assertEqual(agent.rr_trade(d, 1, 100, 10, 2), (2.0, "tp"))
+
+    def test_stop_first(self):
+        d = self.days([[101, 89, 95], [125, 94, 120]])
+        self.assertEqual(agent.rr_trade(d, 1, 100, 10, 2), (-1.0, "sl"))
+
+    def test_both_same_day_counts_as_stop(self):
+        d = self.days([[125, 85, 110]])
+        self.assertEqual(agent.rr_trade(d, 1, 100, 10, 2), (-1.0, "sl"))
+
+    def test_short_and_close_exit(self):
+        d = self.days([[105, 79, 85]])
+        self.assertEqual(agent.rr_trade(d, -1, 100, 10, 2), (2.0, "tp"))
+        d = self.days([[105, 95, 95]])
+        self.assertEqual(agent.rr_trade(d, -1, 100, 10, 2), (0.5, "close"))
+
+    def test_atr_uses_only_past_weeks(self):
+        w = agent.complete_weeks(agent.to_weekly(synthetic_daily(40)),
+                                 pd.Timestamp("2100-01-01", tz="UTC"))
+        a1 = agent.weekly_atr(w)
+        w2 = w.copy()
+        w2.iloc[30:, :4] *= 2
+        pd.testing.assert_series_equal(a1.iloc[:31], agent.weekly_atr(w2).iloc[:31])
+
+    def test_backtest_summary(self):
+        daily = synthetic_daily(60)
+        w = agent.complete_weeks(agent.to_weekly(daily), pd.Timestamp("2100-01-01", tz="UTC"))
+        direction = pd.Series(1, index=w.index)
+        tr, s = agent.rr_backtest(daily, w, direction, fee=0.0)
+        self.assertEqual(s["trades"], len(w) - 14)  # ilk 14 haftada ATR yok
+        self.assertTrue(tr["r"].between(-1, 2).all())
+        self.assertAlmostEqual(s["tp_rate"] + s["sl_rate"] + s["close_rate"], 1.0)
+        self.assertAlmostEqual(s["total_r"], tr["r"].sum())
+
+
 class TestStatistics(unittest.TestCase):
     def test_psr_increases_with_sharpe(self):
         rng = np.random.default_rng(1)

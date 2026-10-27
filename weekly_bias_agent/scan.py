@@ -119,6 +119,8 @@ def main():
                     help="işlem modu için yıllık hedef volatilite (0 = kapalı)")
     ap.add_argument("--min-train", type=int, default=52)
     ap.add_argument("--min-active", type=int, default=20)
+    ap.add_argument("--rr", type=float, default=2.0, help="TP = rr × R (stop = 1R)")
+    ap.add_argument("--stop-atr", type=float, default=0.5, help="R = k × haftalık ATR")
     ap.add_argument("--out", default=str(Path(__file__).parent / "reports"))
     a = ap.parse_args()
 
@@ -146,6 +148,10 @@ def main():
             row.update({"weeks": weeks, "note": "" if enough else "yetersiz geçmiş, backtest yok"})
             row.update({f"bias_{k}": v for k, v in summarize(bias, enough).items()})
             row.update({f"trade_{k}": v for k, v in summarize(trade, enough).items()})
+            if enough:
+                _, rr = agent.rr_backtest(daily, bias["w"], bias["pos"].iloc[bias["oos"]],
+                                          a.stop_atr, a.rr, a.fee)
+                row.update({f"rr_{k}": v for k, v in rr.items()})
         except Exception as e:
             row.update({"bias_signal": None, "note": f"hata: {e}"})
         results.append(row)
@@ -217,13 +223,20 @@ def main():
         "**En isabetsiz 10:** " + ", ".join(
             f"{r.symbol} %{r.bias_acc_acc * 100:.1f}" for r in ok.nsmallest(10, "bias_acc_acc").itertuples()),
         "",
+        f"**TP {a.rr:g}R / SL 1R** (R = {a.stop_atr:g} × haftalık ATR, ajanın L/S bias yönüyle): "
+        f"toplam {int(ok['rr_trades'].sum())} işlem, havuzlanmış ortalama "
+        f"{(ok['rr_avg_r'] * ok['rr_trades']).sum() / ok['rr_trades'].sum():+.3f}R/işlem; "
+        f"TP %{ok['rr_tp_rate'].mean() * 100:.0f}, SL %{ok['rr_sl_rate'].mean() * 100:.0f}, "
+        f"hafta sonu çıkış %{ok['rr_close_rate'].mean() * 100:.0f}; toplam R'si pozitif "
+        f"{int((ok['rr_total_r'] > 0).sum())}/{len(ok)} coin.",
+        "",
         f"Backtesti olan {len(bt)} coinde Sharpe'ı buy & hold'u geçen: L/S {beat('bias')}, "
         f"işlem modu {beat('trade')}. PSR ≥ %95 olan: L/S {signif('bias')}, "
         f"işlem modu {signif('trade')}.",
         "",
-        "| # | Coin | Bias isabeti | %95 aralık | Bias sayısı | LONG isabeti | SHORT isabeti | Şans seviyesi | p | Son 52 hafta | Bu haftaki bias | Kural | İşlem pozisyonu | Hafta | L/S getiri | L/S SR | L/S DD | "
+        "| # | Coin | Bias isabeti | %95 aralık | Bias sayısı | LONG isabeti | SHORT isabeti | Şans seviyesi | p | Son 52 hafta | 2R/1R toplam R | Ort. R | TP/SL |  Bu haftaki bias | Kural | İşlem pozisyonu | Hafta | L/S getiri | L/S SR | L/S DD | "
         "İşlem getiri | İşlem SR | İşlem DD | İşlem PSR | B&H getiri | B&H SR | B&H DD | Not |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         size = r.get("trade_size") or 0
@@ -234,6 +247,8 @@ def main():
             f"{pp(r, 'bias_acc_short_acc')} ({cnt(r, 'bias_acc_short_n')}) | "
             f"{pp(r, 'bias_acc_chance', 1)} | {num(r, 'bias_acc_p_value', '{:.3f}')} | "
             f"{pp(r, 'bias_acc_recent_acc')} ({cnt(r, 'bias_acc_recent_n')}) | "
+            f"{num(r, 'rr_total_r', '{:+.1f}')} | {num(r, 'rr_avg_r', '{:+.3f}')} | "
+            f"{pp(r, 'rr_tp_rate')}/{pp(r, 'rr_sl_rate')} | "
             f"{BIAS_TXT.get(r.get('bias_signal'), '?')} | "
             f"`{r.get('bias_rule', '-')}` | {'LONG %' + format(size * 100, '.0f') if size > 0 else '—'} | "
             f"{r.get('weeks', '—')} | {p(r, 'bias_ret')} | {num(r, 'bias_sharpe')} | "
