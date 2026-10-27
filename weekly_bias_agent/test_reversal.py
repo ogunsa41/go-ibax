@@ -68,6 +68,38 @@ class TestFeatures(unittest.TestCase):
         self.assertAlmostEqual(ra.round_step(0.45), 0.05)
 
 
+class TestLeftStructure(unittest.TestCase):
+    def test_bullish_fvg_detected_until_filled(self):
+        # 2. gün yukarı boşluk: low[2]=106 > high[0]=101 -> bölge 101..106
+        rows = [[100, 101, 99, 100], [100, 105, 100, 104], [104, 110, 106, 109],
+                [109, 112, 108, 111], [111, 111, 104, 105], [105, 106, 98, 99], [99, 100, 103.5, 99]]
+        idx = pd.date_range("2024-01-01", periods=len(rows), freq="D", tz="UTC")
+        d = pd.DataFrame(rows, columns=["open", "high", "low", "close"], index=idx)
+        z = ra._zone_scan(d, np.zeros(len(d)), 365)
+        # 4. gün bölgeye iniyor (True); 5. gün bölgenin altına geçip kapatıyor (98 bölge dışı);
+        # 6. gün bölgeye dönse de FVG artık kapanmış sayılır
+        self.assertEqual(z["fvg_low"].tolist(), [False, False, False, False, True, False, False])
+
+    def test_left_structure_ignores_future(self):
+        d = synthetic_daily(150)
+        k = 700
+        d2 = d.copy()
+        d2.iloc[k + 1:, :4] *= 1.6
+        d2.iloc[k + 1:, 4] *= 5
+        lo1, hi1, _ = ra.left_structure(d, ra.zigzag(d))
+        lo2, hi2, _ = ra.left_structure(d2, ra.zigzag(d2))
+        pd.testing.assert_frame_equal(lo1.iloc[:k + 1], lo2.iloc[:k + 1])
+        pd.testing.assert_frame_equal(hi1.iloc[:k + 1], hi2.iloc[:k + 1])
+
+    def test_volume_profile_poc(self):
+        idx = pd.date_range("2024-01-01", periods=200, freq="D", tz="UTC")
+        c = np.r_[np.full(150, 100.0), np.linspace(100, 140, 50)]
+        d = pd.DataFrame({"open": c, "high": c + 1, "low": c - 1, "close": c,
+                          "volume": np.r_[np.full(150, 10.0), np.ones(50)]}, index=idx)
+        poc, _, _ = ra._volume_profile(d, days=180)
+        self.assertLess(abs(poc[-1] - 100), 1.5)
+
+
 class TestStats(unittest.TestCase):
     def test_enrichment_lift(self):
         idx = pd.date_range("2024-01-01", periods=10, freq="D", tz="UTC")

@@ -92,3 +92,11 @@ python3 reversal_agent.py --symbols BTCUSDT ETHUSDT --swing-atr 3
 Not: dönüşler hareketin en uç günü olduğundan "SMA20'den uzak", "RSI aşırı", "geniş mum"
 gibi özellikler dönüşlerde kısmen mekanik olarak sık görülür; ileriye dönük getiri sütunu bu
 yüzden asıl sınamadır.
+
+### Sol taraf yapısı
+
+Rapor ayrıca dönüş fiyatının solunda (geçmişte) yapı olup olmadığını inceler: son 1 yılın
+küçük (2 ATR) ve büyük swing seviyeleri, aynı seviyeden ≥ 2 kez dönüş, son 180 günün hacim
+profili (POC, HVN, LVN), kapanmamış FVG'ler ve bozulmamış order block'lar. Normal günlerle
+kıyaslamanın yanında daha adil bir test de yapılır: fiyat 20 günlük yeni dip/tepe yaptığında,
+solda yapı varken ve yokken o günün gerçek dönüş olma oranı.

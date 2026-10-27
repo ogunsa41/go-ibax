@@ -210,6 +210,124 @@ def features(daily, piv, tol_atr=0.25):
     return build("low"), build("high")
 
 
+# ----------------------------------------------------------------------------- sol taraf
+def _zone_scan(daily, tol, lookback):
+    """Kapanmamış FVG ve geçersizleşmemiş order block'lar. Her gün t için, t'den ÖNCE
+    oluşmuş ve t'ye kadar kapanmamış/bozulmamış bölgelerin içinde (± tol) mi bakılır.
+
+    Dönüş: dip tarafı (low, boğa bölgeleri) ve tepe tarafı (high, ayı bölgeleri) için
+    FVG ve OB bool dizileri.
+    """
+    o, h, l, c = (daily[k].values for k in ("open", "high", "low", "close"))
+    a = atr(daily).values
+    n = len(daily)
+    res = {k: np.zeros(n, bool) for k in ("fvg_low", "fvg_high", "ob_low", "ob_high")}
+    bull_fvg, bear_fvg, bull_ob, bear_ob = [], [], [], []  # (oluşum, alt, üst)
+    for t in range(n):
+        tt = tol[t] if tol[t] == tol[t] else 0.0
+        for zones, key, x in ((bull_fvg, "fvg_low", l[t]), (bear_fvg, "fvg_high", h[t]),
+                              (bull_ob, "ob_low", l[t]), (bear_ob, "ob_high", h[t])):
+            res[key][t] = any(z0 - tt <= x <= z1 + tt for j, z0, z1 in zones if t - j <= lookback)
+        # t günü bölgeleri günceller: dolan / bozulan bölgeler düşer
+        bull_fvg[:] = [z for z in bull_fvg if l[t] > z[1] and t - z[0] <= lookback]
+        bear_fvg[:] = [z for z in bear_fvg if h[t] < z[2] and t - z[0] <= lookback]
+        bull_ob[:] = [z for z in bull_ob if c[t] >= z[1] and t - z[0] <= lookback]
+        bear_ob[:] = [z for z in bear_ob if c[t] <= z[2] and t - z[0] <= lookback]
+        # t gününün kapanışıyla oluşan yeni bölgeler (t+1'den itibaren geçerli)
+        if t >= 2 and l[t] > h[t - 2]:
+            bull_fvg.append((t, h[t - 2], l[t]))
+        if t >= 2 and h[t] < l[t - 2]:
+            bear_fvg.append((t, h[t], l[t - 2]))
+        if t >= 1 and a[t - 1] == a[t - 1] and (h[t] - l[t]) >= 1.5 * a[t - 1]:
+            if c[t] > o[t] and c[t - 1] < o[t - 1] and c[t] > h[t - 1]:
+                bull_ob.append((t, l[t - 1], h[t - 1]))
+            if c[t] < o[t] and c[t - 1] > o[t - 1] and c[t] < l[t - 1]:
+                bear_ob.append((t, l[t - 1], h[t - 1]))
+    return res
+
+
+def _volume_profile(daily, days=180, bins=40):
+    """Her gün için son `days` günün hacim profili (t günü hariç): POC fiyatı ve günün
+    low/high'ının düştüğü fiyat kutusunun hacim yüzdelik sırası (0..1)."""
+    h, l, c, v = (daily[k].values for k in ("high", "low", "close", "volume"))
+    tp = (h + l + c) / 3
+    n = len(daily)
+    poc = np.full(n, np.nan)
+    rank_low, rank_high = np.full(n, np.nan), np.full(n, np.nan)
+    for t in range(days, n):
+        lo, hi = l[t - days:t].min(), h[t - days:t].max()
+        if not hi > lo:
+            continue
+        hist, edges = np.histogram(tp[t - days:t], bins=bins, range=(lo, hi), weights=v[t - days:t])
+        k = int(np.argmax(hist))
+        poc[t] = (edges[k] + edges[k + 1]) / 2
+        order = hist.argsort().argsort() / (bins - 1)  # kutunun hacim sırası
+        for x, out in ((l[t], rank_low), (h[t], rank_high)):
+            if lo <= x <= hi:
+                out[t] = order[min(int((x - lo) / (hi - lo) * bins), bins - 1)]
+    return poc, rank_low, rank_high
+
+
+def left_structure(daily, piv_major, tol_atr=0.25, lookback=365, minor_atr=2.0):
+    """Dönüş fiyatının solunda (geçmişte) yapı var mı? Dip ve tepe tarafı bool özellikleri
+    ve en yakın eski swing seviyesine ATR cinsinden uzaklık."""
+    a = atr(daily).shift(1)
+    tol = (tol_atr * a).values
+    av = a.values
+    l, h = daily["low"].values, daily["high"].values
+    dates = daily.index.values
+    piv_minor = zigzag(daily, minor_atr)
+    zones = _zone_scan(daily, tol, lookback)
+    poc, rank_low, rank_high = _volume_profile(daily)
+    year = np.timedelta64(lookback, "D")
+
+    def swing_arrays(piv):
+        p = piv.sort_values("confirmed")
+        return p["confirmed"].values, p["date"].values, p["price"].values
+
+    mi_conf, mi_date, mi_price = swing_arrays(piv_minor)
+    ma_conf, ma_date, ma_price = swing_arrays(piv_major)
+    out, dist = {}, {}
+    for side, x in (("low", l), ("high", h)):
+        f = {k: np.zeros(len(daily), bool) for k in (
+            "sol: küçük swing seviyesi (son 1 yıl)", "sol: büyük swing seviyesi (son 1 yıl)",
+            "sol: seviye ≥ 2 kez dönmüş (eşit dip/tepe)", "sol: hacim profili POC",
+            "sol: yüksek hacim bölgesi (HVN)", "sol: düşük hacim bölgesi (LVN)",
+            "sol: kapanmamış FVG", "sol: order block", "sol: herhangi bir yapı",
+            "sol: yapı yok (1 yıllık yeni uç)")}
+        d = np.full(len(daily), np.nan)
+        rank = rank_low if side == "low" else rank_high
+        prev_ext = (pd.Series(l).rolling(lookback, min_periods=60).min().shift(1).values
+                    if side == "low" else
+                    pd.Series(h).rolling(lookback, min_periods=60).max().shift(1).values)
+        for t in range(len(daily)):
+            if not av[t] > 0:
+                continue
+            m = (mi_conf < dates[t]) & (mi_date >= dates[t] - year)
+            M = (ma_conf < dates[t]) & (ma_date >= dates[t] - year)
+            dm = np.abs(mi_price[m] - x[t])
+            if len(dm):
+                d[t] = dm.min() / av[t]
+                f["sol: küçük swing seviyesi (son 1 yıl)"][t] = dm.min() <= tol[t]
+                f["sol: seviye ≥ 2 kez dönmüş (eşit dip/tepe)"][t] = (dm <= 2 * tol[t]).sum() >= 2
+            if M.any():
+                f["sol: büyük swing seviyesi (son 1 yıl)"][t] = np.abs(ma_price[M] - x[t]).min() <= tol[t]
+            f["sol: hacim profili POC"][t] = poc[t] == poc[t] and abs(poc[t] - x[t]) <= 2 * tol[t]
+            f["sol: yüksek hacim bölgesi (HVN)"][t] = rank[t] == rank[t] and rank[t] >= 0.8
+            f["sol: düşük hacim bölgesi (LVN)"][t] = rank[t] == rank[t] and rank[t] <= 0.2
+            f["sol: yapı yok (1 yıllık yeni uç)"][t] = prev_ext[t] == prev_ext[t] and (
+                x[t] < prev_ext[t] if side == "low" else x[t] > prev_ext[t])
+        f["sol: kapanmamış FVG"] = zones[f"fvg_{side}"]
+        f["sol: order block"] = zones[f"ob_{side}"]
+        f["sol: herhangi bir yapı"] = (
+            f["sol: küçük swing seviyesi (son 1 yıl)"] | f["sol: büyük swing seviyesi (son 1 yıl)"]
+            | f["sol: hacim profili POC"] | f["sol: yüksek hacim bölgesi (HVN)"]
+            | f["sol: kapanmamış FVG"] | f["sol: order block"])
+        out[side] = pd.DataFrame(f, index=daily.index)
+        dist[side] = pd.Series(d, index=daily.index)
+    return out["low"], out["high"], dist
+
+
 # ----------------------------------------------------------------------------- istatistik
 def bh_adjust(p):
     p = np.asarray(p, dtype=float)
@@ -256,10 +374,12 @@ def enrichment(fmat, is_swing, valid, fwd):
 def analyze_coin(daily, swing_atr=4.0, split=0.7, horizon=10):
     piv = zigzag(daily, swing_atr)
     f_low, f_high = features(daily, piv)
+    s_low, s_high, dist = left_structure(daily, piv)
+    f_low, f_high = pd.concat([f_low, s_low], axis=1), pd.concat([f_high, s_high], axis=1)
     valid = pd.Series(daily.index >= daily.index[min(200, len(daily) - 1)], index=daily.index)
     cut = daily.index[int(len(daily) * split)]
     fwd = daily["close"].shift(-horizon) / daily["close"] - 1
-    out = {}
+    out, dists, cands = {}, {}, {}
     for side, fmat in (("low", f_low), ("high", f_high)):
         sw = pd.Series(daily.index.isin(piv.loc[piv["kind"] == side, "date"]), index=daily.index)
         sfwd = fwd if side == "low" else -fwd
@@ -273,7 +393,17 @@ def analyze_coin(daily, swing_atr=4.0, split=0.7, horizon=10):
         res["valid_days"] = int(valid.sum())
         res["side"] = side
         out[side] = res
-    return piv, out
+        dists[side] = (dist[side][valid & sw].dropna().values, dist[side][valid].dropna().values)
+        # Aday günler: fiyat 20 günlük yeni uç yapıyor. Yapı varken / yokken dönüş oranı.
+        x = daily["low"] if side == "low" else daily["high"]
+        ext = x.rolling(20).min() if side == "low" else x.rolling(20).max()
+        cand = valid & (x == ext)
+        cstats = {}
+        for col in [c for c in fmat.columns if c.startswith("sol:")]:
+            yes, no = cand & fmat[col], cand & ~fmat[col]
+            cstats[col] = (int(yes.sum()), int((yes & sw).sum()), int(no.sum()), int((no & sw).sum()))
+        cands[side] = cstats
+    return piv, out, {"dist": dists, "cand": cands}
 
 
 def swing_profile(daily, piv):
@@ -348,7 +478,49 @@ def feature_rows(t):
     return lines
 
 
-def report(t, profiles, symbols, swing_atr, stamp):
+def left_section(t, dists):
+    """Sol taraf yapısı bölümü: yapı özellikleri ve en yakın eski swing'e uzaklık."""
+    lines = ["## Sol taraf yapısı",
+             "Dönüş fiyatının solunda (geçmişte) yapı var mı? Swing seviyeleri 2 ATR (küçük) "
+             "ve 4 ATR (büyük) zigzag'dan, son 1 yıl; hacim profili son 180 gün; FVG ve order "
+             "block o güne kadar kapanmamış/bozulmamış olanlar. Hepsi normal günlerle kıyaslanır.",
+             ""]
+    for side, name in (("low", "Dipler"), ("high", "Tepeler")):
+        sub = t[(t.side == side) & t.feature.str.startswith("sol:")].sort_values("lift", ascending=False)
+        lines += [f"### {name}", *feature_rows(sub), ""]
+        rows = []
+        for col in sub.feature:
+            yes_n = sum(d["cand"][side][col][0] for d in dists.values())
+            yes_k = sum(d["cand"][side][col][1] for d in dists.values())
+            no_n = sum(d["cand"][side][col][2] for d in dists.values())
+            no_k = sum(d["cand"][side][col][3] for d in dists.values())
+            if yes_n and no_n:
+                p1, p2 = yes_k / yes_n, no_k / no_n
+                pp = (yes_k + no_k) / (yes_n + no_n)
+                se = math.sqrt(pp * (1 - pp) * (1 / yes_n + 1 / no_n))
+                pv = 2 * (1 - N.cdf(abs(p1 - p2) / se)) if se > 0 else 1.0
+                rows.append(f"| {col} | {pct(p1)} ({yes_k}/{yes_n}) | {pct(p2)} ({no_k}/{no_n}) | "
+                            f"{p1 / p2 if p2 else float('nan'):.2f}× | {pv:.3f} |")
+        word, poss = ("dip", "dibi") if side == "low" else ("tepe", "tepesi")
+        lines += [f"**Fiyat 20 günlük yeni {word} yaptığında, o günün gerçek dönüş {poss} olma oranı:**",
+                  "", f"| Özellik | Yapı varken | Yapı yokken | Oran | p |", "|---|---|---|---|---|",
+                  *rows, ""]
+        sw = np.concatenate([d["dist"][side][0] for d in dists.values()])
+        al = np.concatenate([d["dist"][side][1] for d in dists.values()])
+        if len(sw) and len(al):
+            lines += [
+                "| En yakın eski küçük swing seviyesine uzaklık | Dönüşlerde | Tüm günlerde |",
+                "|---|---|---|",
+                f"| Ortanca (ATR) | {np.median(sw):.2f} | {np.median(al):.2f} |",
+                f"| ≤ 0.25 ATR | {pct((sw <= 0.25).mean())} | {pct((al <= 0.25).mean())} |",
+                f"| ≤ 0.5 ATR | {pct((sw <= 0.5).mean())} | {pct((al <= 0.5).mean())} |",
+                f"| ≤ 1 ATR | {pct((sw <= 1).mean())} | {pct((al <= 1).mean())} |",
+                f"| > 3 ATR (solda yakın yapı yok) | {pct((sw > 3).mean())} | {pct((al > 3).mean())} |",
+                ""]
+    return lines
+
+
+def report(t, profiles, symbols, swing_atr, stamp, dists=None):
     sw_lo = t[t.side == "low"]["swings"].max()
     sw_hi = t[t.side == "high"]["swings"].max()
     robust = t[(t.q_value < 0.05) & (t.lift > 1) & (t.lift_train > 1) & (t.lift_test > 1)]
@@ -382,6 +554,7 @@ def report(t, profiles, symbols, swing_atr, stamp):
            f"(taban {pct(r.base_fwd_mean)}), {r.coins_fwd_better}/{r.coins} coinde tabandan iyi"
            for r in robust.sort_values("lift", ascending=False).itertuples()] or ["- Yok"]),
         "",
+        *(left_section(t, dists) if dists else []),
         "## Dipler — tüm özellikler",
         *feature_rows(t[t.side == "low"].sort_values("lift", ascending=False)),
         "",
@@ -421,7 +594,7 @@ def main():
         pairs += pd.read_csv(a.list)["pair"].tolist()
     pairs = pairs or ["BTCUSDT"]
 
-    results, profiles, used = {}, {}, []
+    results, profiles, dists, used = {}, {}, {}, []
     for pair in pairs:
         try:
             daily = agent.fetch_binance(pair)
@@ -431,8 +604,8 @@ def main():
         if len(daily) < 400:
             print(f"{pair}: yetersiz veri ({len(daily)} gün)")
             continue
-        piv, res = analyze_coin(daily, a.swing_atr)
-        results[pair], profiles[pair] = res, swing_profile(daily, piv)
+        piv, res, dist = analyze_coin(daily, a.swing_atr)
+        results[pair], profiles[pair], dists[pair] = res, swing_profile(daily, piv), dist
         used.append(pair.replace("USDT", ""))
         print(f"{pair}: {len(piv)} dönüş", flush=True)
         time.sleep(0.2)
@@ -442,7 +615,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     stamp = pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%d")
     t.to_csv(out / f"reversals_{stamp}.csv", index=False)
-    md = report(t, profiles, used, a.swing_atr, stamp)
+    md = report(t, profiles, used, a.swing_atr, stamp, dists)
     (out / f"reversals_{stamp}.md").write_text(md)
     print("\n" + md)
 
