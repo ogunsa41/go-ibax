@@ -56,26 +56,29 @@ def _binance_get(path):
     raise RuntimeError(f"Binance'e ulaşılamadı: {err}")
 
 
-def fetch_binance(symbol):
-    """Binance spot günlük mumlarını en baştan itibaren 1000'erli sayfalarla çeker."""
+INTERVALS = {"1h": pd.Timedelta(hours=1), "4h": pd.Timedelta(hours=4), "1d": pd.Timedelta(days=1)}
+
+
+def fetch_binance(symbol, interval="1d"):
+    """Binance spot mumlarını en baştan itibaren 1000'erli sayfalarla çeker."""
     symbol = symbol.replace("_", "").replace("/", "").upper()
     rows, start = [], 0
     while True:
-        data = _binance_get(f"/api/v3/klines?symbol={symbol}&interval=1d"
+        data = _binance_get(f"/api/v3/klines?symbol={symbol}&interval={interval}"
                             f"&startTime={start}&limit=1000")
         if not data:
             break
         rows += data
         if len(data) < 1000:
             break
-        start = data[-1][0] + DAY_MS
+        start = data[-1][0] + 1
     if not rows:
         raise RuntimeError(f"{symbol} için Binance verisi bulunamadı")
     df = pd.DataFrame([r[:6] for r in rows],
                       columns=["t", "open", "high", "low", "close", "volume"])
     df["t"] = pd.to_datetime(df["t"], unit="ms", utc=True)
     df = df.drop_duplicates("t").set_index("t").sort_index().astype(float)
-    return drop_open_candle(df)
+    return drop_open_candle(df, period=INTERVALS[interval])
 
 
 def fetch_cryptocom(symbol, max_pages=20):
@@ -101,10 +104,10 @@ def fetch_cryptocom(symbol, max_pages=20):
     return drop_open_candle(df)
 
 
-def drop_open_candle(df, now=None):
-    """Henüz kapanmamış günlük mumu at (kapanmamış mumla sinyal üretmemek için)."""
+def drop_open_candle(df, now=None, period=pd.Timedelta(days=1)):
+    """Henüz kapanmamış mumu at (kapanmamış mumla sinyal üretmemek için)."""
     now = now or pd.Timestamp.now(tz="UTC")
-    return df[df.index + pd.Timedelta(days=1) <= now]
+    return df[df.index + period <= now]
 
 
 def to_weekly(daily):
