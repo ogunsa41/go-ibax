@@ -174,25 +174,28 @@ class TestRules(unittest.TestCase):
         self.assertEqual(self.last_signal(rows, "premium_discount_4w"), 1)
 
 
-class TestUpProbability(unittest.TestCase):
-    def test_conditional_frequency_and_no_future_data(self):
-        w = agent.complete_weeks(agent.to_weekly(synthetic_daily(120)),
-                                 pd.Timestamp("2100-01-01", tz="UTC"))
-        p = agent.up_probability(w, "momentum_1w")
-        sig, mkt = agent.bias_rules(w)
-        state = int(np.sign(mkt["ret"].iloc[-1]))  # bu haftanın sinyali = son haftanın yönü
-        self.assertEqual(p["state"], state)
-        hist = mkt["ret"][sig["momentum_1w"] == state]
-        self.assertEqual(p["n"], len(hist))
-        self.assertAlmostEqual(p["up_prob"], (hist > 0).mean())
-        self.assertLessEqual(p["ci_low"], p["up_prob"])
-        self.assertGreaterEqual(p["ci_high"], p["up_prob"])
+class TestBiasAccuracy(unittest.TestCase):
+    def test_counts_hits_and_ignores_neutral(self):
+        idx = pd.date_range("2024-01-01", periods=6, freq="7D", tz="UTC")
+        pos = pd.Series([1, 1, -1, -1, 0, 0.5], index=idx)
+        ret = pd.Series([0.1, -0.1, -0.2, 0.3, 0.5, 0.05], index=idx)
+        a = agent.bias_accuracy(pos, ret, recent=3)
+        self.assertEqual(a["n"], 5)
+        self.assertAlmostEqual(a["acc"], 3 / 5)
+        self.assertEqual((a["long_n"], a["short_n"]), (3, 2))
+        self.assertAlmostEqual(a["long_acc"], 2 / 3)
+        self.assertAlmostEqual(a["short_acc"], 1 / 2)
+        # 3/5 yükseliş haftası, 3/5 LONG: 0.6*0.6 + 0.4*0.4
+        self.assertAlmostEqual(a["chance"], 0.52)
+        self.assertEqual(a["recent_n"], 2)
+        self.assertAlmostEqual(a["recent_acc"], 0.5)
 
-    def test_no_rule_gives_base_rate(self):
-        w = agent.complete_weeks(agent.to_weekly(synthetic_daily(60)),
-                                 pd.Timestamp("2100-01-01", tz="UTC"))
-        p = agent.up_probability(w, None)
-        self.assertAlmostEqual(p["up_prob"], p["base_rate"])
+    def test_perfect_predictor_is_significant(self):
+        rng = np.random.default_rng(3)
+        ret = pd.Series(rng.normal(0, 0.05, 200))
+        a = agent.bias_accuracy(np.sign(ret), ret)
+        self.assertEqual(a["acc"], 1.0)
+        self.assertLess(a["p_value"], 0.001)
 
     def test_wilson(self):
         lo, hi = agent.wilson(50, 100)

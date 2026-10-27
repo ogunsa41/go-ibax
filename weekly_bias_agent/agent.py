@@ -348,27 +348,38 @@ def wilson(k, n, z=1.96):
     return mid - half, mid + half
 
 
-def up_probability(w, rule):
-    """Bu haftanın yükseliş olasılığı (yüzdelik bias).
+def bias_accuracy(pos, ret, recent=52):
+    """Ajanın bias isabeti: LONG dediği haftaların yükselişle, SHORT dediklerinin düşüşle
+    kapanma oranı (NÖTR haftalar sayılmaz).
 
-    Seçilen kuralın bu hafta için verdiği sinyal durumu (+1/0/-1) geçmişte hangi haftalarda
-    oluştuysa, o haftaların yüzde kaçı yükselişle kapandı. Kural yoksa tüm haftaların oranı.
-    Yalnızca tamamlanmış haftalar kullanılır.
+    Şans seviyesi: aynı LONG/SHORT karışımıyla rastgele tahmin yapılsaydı beklenen isabet
+    (LONG payı × yükseliş oranı + SHORT payı × düşüş oranı). p-değeri bu seviyeye karşı
+    tek yönlü binom testinin normal yaklaşımıdır.
     """
-    nxt = w.iloc[[-1]].copy()
-    nxt.index = nxt.index + pd.Timedelta(weeks=1)
-    sig, mkt = bias_rules(pd.concat([w, nxt]))
-    ret = mkt["ret"].iloc[:-1]
-    if rule:
-        state = int(sig[rule].iloc[-1])
-        hist = ret[sig[rule].iloc[:-1] == state]
+    d = np.sign(pos)
+    calls = d != 0
+    hit = (d * ret > 0)[calls]
+    n, k = int(calls.sum()), int(hit.sum())
+    out = {"n": n, "acc": k / n if n else float("nan")}
+    out["ci_low"], out["ci_high"] = wilson(k, n)
+    for name, side in (("long", 1), ("short", -1)):
+        m = d == side
+        out[f"{name}_n"] = int(m.sum())
+        out[f"{name}_acc"] = float((ret[m] > 0).mean() if side > 0 else (ret[m] < 0).mean()) \
+            if m.any() else float("nan")
+    up = float((ret[calls] > 0).mean()) if n else float("nan")
+    share_long = out["long_n"] / n if n else float("nan")
+    out["chance"] = share_long * up + (1 - share_long) * (1 - up) if n else float("nan")
+    if n and 0 < out["chance"] < 1:
+        z = (k - n * out["chance"]) / math.sqrt(n * out["chance"] * (1 - out["chance"]))
+        out["p_value"] = 1 - N.cdf(z)
     else:
-        state, hist = None, ret
-    n, k = len(hist), int((hist > 0).sum())
-    lo, hi = wilson(k, n)
-    return {"up_prob": k / n if n else float("nan"), "ci_low": lo, "ci_high": hi, "n": n,
-            "avg_ret": float(hist.mean()) if n else float("nan"), "state": state,
-            "base_rate": float((ret > 0).mean())}
+        out["p_value"] = float("nan")
+    rd, rr = d.iloc[-recent:], ret.iloc[-recent:]
+    rc = rd != 0
+    out["recent_n"] = int(rc.sum())
+    out["recent_acc"] = float((rd * rr > 0)[rc].mean()) if rc.any() else float("nan")
+    return out
 
 
 def weekday_profile(daily):
@@ -407,8 +418,8 @@ def analyze(daily, fee=0.001, long_only=False, min_train=52, min_active=20,
 
     week, best, best_sh, signal, size = next_week_signal(w, fee, min_active, long_only,
                                                          lookback, vol_target)
-    prob = up_probability(w, best)
-    return {"w": w, "sig": sig, "ret": mkt["ret"], "mkt": mkt, "rule_tbl": rule_tbl, "prob": prob,
+    acc = bias_accuracy(pos.iloc[oos], mkt["ret"].iloc[oos])
+    return {"w": w, "sig": sig, "ret": mkt["ret"], "mkt": mkt, "rule_tbl": rule_tbl, "acc": acc,
             "split": split, "best_train": best_train, "dsr": dsr,
             "pos": pos, "chosen": chosen, "agent_r": agent_r, "oos": oos, "bh": bh,
             "agent_stats": stats(agent_r.iloc[oos], pos), "bh_stats": stats(bh),
@@ -491,11 +502,13 @@ def main():
         f"kural seçimi {'son ' + str(a.lookback) + ' hafta' if a.lookback else 'tüm geçmiş'}.",
         "",
         f"## Bu haftanın bias'ı ({week.date()} haftası)",
-        f"**Yükseliş olasılığı: %{res['prob']['up_prob'] * 100:.0f}** "
-        f"(%95 aralık %{res['prob']['ci_low'] * 100:.0f}–%{res['prob']['ci_high'] * 100:.0f}, "
-        f"geçmişte aynı sinyalin verildiği {res['prob']['n']} hafta, o haftaların ort. getirisi "
-        f"{pct(res['prob']['avg_ret'])}; tüm haftalarda yükseliş oranı "
-        f"%{res['prob']['base_rate'] * 100:.0f})",
+        f"**Ajanın bias isabeti: %{res['acc']['acc'] * 100:.1f}** — geçmişte verdiği "
+        f"{res['acc']['n']} LONG/SHORT bias'ın doğru çıkma oranı "
+        f"(%95 aralık %{res['acc']['ci_low'] * 100:.0f}–%{res['acc']['ci_high'] * 100:.0f}; "
+        f"LONG %{res['acc']['long_acc'] * 100:.0f} / {res['acc']['long_n']}, "
+        f"SHORT %{res['acc']['short_acc'] * 100:.0f} / {res['acc']['short_n']}; "
+        f"şans seviyesi %{res['acc']['chance'] * 100:.1f}, p = {res['acc']['p_value']:.3f}; "
+        f"son 52 hafta %{res['acc']['recent_acc'] * 100:.0f} / {res['acc']['recent_n']})",
         "",
         f"**{label}** — seçilen kural: `{best}` (geçmiş Sharpe {best_sh:.2f}{size_txt})" if best else
         f"**{label}** — hiçbir kural geçmişte pozitif Sharpe vermedi, bias yok.",
