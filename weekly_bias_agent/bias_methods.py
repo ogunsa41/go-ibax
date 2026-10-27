@@ -146,6 +146,8 @@ def evaluate(sig, bars):
         "bars": int(ok.sum()), "long": int(L.sum()), "short": int(S.sum()),
         "long_dir": int((L & up).sum()), "short_dir": int((S & dn).sum()),
         "long_tgt": int((L & take_hi).sum()), "short_tgt": int((S & take_lo).sum()),
+        # ters uç: long'da önceki low'un, short'ta önceki high'ın alınması
+        "long_opp": int((L & take_lo).sum()), "short_opp": int((S & take_hi).sum()),
         "up": int((up & ok).sum()), "down": int((dn & ok).sum()),
         "take_hi": int((take_hi & ok).sum()), "take_lo": int((take_lo & ok).sum()),
         # şans seviyesi için sinyal verilen mumlardaki yükseliş sayısı
@@ -177,7 +179,19 @@ def summarize(counts):
         "long_tgt": k["long_tgt"] / k["long"] if k["long"] else float("nan"),
         "short_tgt": k["short_tgt"] / k["short"] if k["short"] else float("nan"),
         "base_hi": base_hi, "base_lo": base_lo,
+        "opp": (k["long_opp"] + k["short_opp"]) / calls if calls else float("nan"),
+        "p_vs_opp": _paired_p(k["long_tgt"] + k["short_tgt"], k["long_opp"] + k["short_opp"], calls),
     }
+
+
+def _paired_p(a, b, n):
+    """Aynı mumlarda hedef ucu (a) ile ters ucun (b) alınma sayısı farkı için tek yönlü
+    yaklaşık test (iki uç aynı mumda alınabildiği için fark varyansı n·(p_a+p_b) ile üstten
+    sınırlanır, test ihtiyatlıdır)."""
+    if not n or a + b == 0:
+        return float("nan")
+    z = (a - b) / math.sqrt(a + b)
+    return 1 - N.cdf(z)
 
 
 def split_eval(sig, bars, frac=0.7):
@@ -231,13 +245,17 @@ def report(results, cases, symbols, stamp):
         "spot. Her sinyal yalnızca önceki mumun kapanışına kadar bilinen veriyle üretildi.",
         "",
         "**Yön isabeti** = mumun bias yönünde kapanma oranı; **şans** = aynı long/short karışımıyla "
-        "rastgele tahminin beklenen isabeti. **Hedef isabeti** = long'da mumun önceki mumun "
-        "high'ını, short'ta low'unu alması; **taban** = sinyalden bağımsız olarak her mumun "
-        "önceki mumun aynı ucunu alma oranı. p < 0.05 anlamlı.",
+        "rastgele tahminin beklenen isabeti. **Hedef ucu alındı** = long'da mumun önceki mumun "
+        "high'ını, short'ta low'unu alması; **ters uç alındı** = aynı mumlarda karşı ucun "
+        "alınması. Bias gerçekten yön biliyorsa hedef ucu ters uçtan belirgin şekilde sık "
+        "alınmalı (iç mumdan sonra iki uç da sık alınır; bu yön bilgisi değildir). "
+        "**Koşulsuz taban** = sinyalden bağımsız olarak her mumun önceki mumun aynı ucunu "
+        "alma oranı. p < 0.05 anlamlı.",
         "",
         "| Yöntem | Sinyal verilen mum | Yön isabeti | Şans | p | LONG / SHORT isabeti | "
-        "Hedef isabeti | Taban | p | Eğitim → Test yön isabeti | Lift > şans olan coin |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "Hedef ucu alındı | Ters uç alındı | p (hedef > ters) | Koşulsuz taban | "
+        "Eğitim → Test yön isabeti | Şansı geçen coin |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for name, _ in METHODS:
         per = [r[name] for r in results.values() if name in r]
@@ -248,20 +266,20 @@ def report(results, cases, symbols, stamp):
         lines.append(
             f"| {name} | {pct(a['coverage'], 0)} ({a['calls']}) | **{pct(a['acc'])}** | {pct(a['chance'])} | "
             f"{a['p_dir']:.3f} | {pct(a['long_acc'], 0)} ({a['long_n']}) / {pct(a['short_acc'], 0)} ({a['short_n']}) | "
-            f"**{pct(a['tgt'])}** | {pct(a['tgt_base'])} | {a['p_tgt']:.3f} | "
+            f"**{pct(a['tgt'])}** | {pct(a['opp'])} | {a['p_vs_opp']:.3f} | {pct(a['tgt_base'])} | "
             f"{pct(tr['acc'])} → {pct(te['acc'])} | {better}/{len(per)} |")
     lines += ["", "## Mum kapanışı / CRT — vaka bazında", "",
-              "| Zaman dilimi | Önceki mum | Mum sayısı | Verilen bias | Yön isabeti | Hedef isabeti | Hedef tabanı |",
+              "| Zaman dilimi | Önceki mum | Mum sayısı | Verilen bias | Yön isabeti | Hedef ucu alındı | Ters uç alındı |",
               "|---|---|---|---|---|---|---|"]
     keys = sorted({k for c in cases.values() for k in c})
     for k in keys:
         per = [c[k] for c in cases.values() if k in c]
         s = summarize(per)
         side = "LONG" if s["long_n"] >= s["short_n"] else "SHORT"
-        lines.append(f"| {k[0]} | {k[1]} | {s['calls']} | {side} | {pct(s['acc'])} | {pct(s['tgt'])} | {pct(s['tgt_base'])} |")
+        lines.append(f"| {k[0]} | {k[1]} | {s['calls']} | {side} | {pct(s['acc'])} | {pct(s['tgt'])} | {pct(s['opp'])} |")
     lines += ["", "> Yön isabeti %50 civarı ve p ≥ 0.05 ise yöntem yönü şanstan iyi bulmuyor demektir. "
-              "Hedef isabeti tabandan yüksek değilse 'önceki mumun ucunu hedefler' iddiası veride "
-              "doğrulanmıyor demektir. Giriş, stop ve alt zaman dilimi onayı (MSS, FVG girişi) "
+              "Hedef ucu ters uçtan sık alınmıyorsa 'önceki mumun ucunu hedefler' iddiası yön "
+              "bilgisi taşımıyor demektir. Giriş, stop ve alt zaman dilimi onayı (MSS, FVG girişi) "
               "test edilmedi; yalnızca bias'ın kendisi ölçüldü. Yatırım tavsiyesi değildir."]
     return "\n".join(lines)
 

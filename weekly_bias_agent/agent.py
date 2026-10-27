@@ -45,14 +45,16 @@ def fetch_daily(symbol, source="binance"):
     return fetch_cryptocom(symbol)
 
 
-def _binance_get(path):
+def _binance_get(path, retries=4):
     err = None
-    for host in BINANCE_HOSTS:
-        try:
-            with urllib.request.urlopen(host + path, timeout=30) as r:
-                return json.load(r)
-        except Exception as e:  # 451 coğrafi engel vb. -> sıradaki host
-            err = e
+    for attempt in range(retries):
+        for host in BINANCE_HOSTS:
+            try:
+                with urllib.request.urlopen(host + path, timeout=30) as r:
+                    return json.load(r)
+            except Exception as e:  # 451 coğrafi engel, bağlantı kopması -> sıradaki host
+                err = e
+        time.sleep(2 ** attempt)
     raise RuntimeError(f"Binance'e ulaşılamadı: {err}")
 
 

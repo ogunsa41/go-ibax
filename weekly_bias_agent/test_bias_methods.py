@@ -82,8 +82,11 @@ class TestEvaluate(unittest.TestCase):
         self.assertEqual(e["short_dir"], 1)   # 4. mum düştü
         self.assertEqual(e["long_tgt"], 1)    # yalnız 2. mum önceki high'ı aldı
         self.assertEqual(e["short_tgt"], 1)   # 4. mum önceki low'u aldı
+        self.assertEqual(e["long_opp"], 1)    # 3. mum (long) önceki low'u aldı
+        self.assertEqual(e["short_opp"], 0)   # 4. mum (short) önceki high'ı almadı
         s = bm.summarize([e])
         self.assertAlmostEqual(s["acc"], 2 / 3)
+        self.assertAlmostEqual(s["opp"], 1 / 3)
 
 
 if __name__ == "__main__":
