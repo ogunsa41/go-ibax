@@ -134,7 +134,8 @@ def bias_rules(w):
 # ----------------------------------------------------------------------------- metrikler
 def strat_returns(signal, ret, fee):
     turnover = signal.diff().abs().fillna(signal.abs())
-    return signal * ret - turnover * fee
+    # Short'ta fiyat haftada %100+ yükselirse sermaye biter (likidasyon): kayıp en fazla -%100
+    return (signal * ret - turnover * fee).clip(lower=-1)
 
 
 def stats(r, signal=None):
@@ -227,6 +228,38 @@ def weekday_profile(daily):
     return out.reindex(order)
 
 
+def analyze(daily, fee=0.001, long_only=False, min_train=52, min_active=20):
+    """Tek bir coin için kural tablosu, walk-forward backtest ve bu haftanın bias'ı."""
+    w_all = to_weekly(daily)
+    now = pd.Timestamp.now(tz="UTC")
+    w = w_all[(w_all.index + pd.Timedelta(weeks=1)) <= now]
+    w = w[w["days"] == 7]
+
+    sig, ret = bias_rules(w)
+    if long_only:
+        sig = sig.clip(lower=0)
+
+    split = int(len(w) * 0.7)
+    rule_tbl = []
+    for k in sig:
+        r = strat_returns(sig[k], ret, fee)
+        rule_tbl.append((k, stats(r.iloc[:split], sig[k]), stats(r.iloc[split:], sig[k])))
+    rule_tbl.sort(key=lambda x: x[1].get("sharpe", 0), reverse=True)
+
+    pos, chosen, agent_r = walk_forward(sig, ret, fee, min_train, min_active)
+    oos = slice(min_train, None)
+    bh = ret.iloc[oos]
+
+    last_idx = w_all.index.get_loc(w.index[-1])
+    week, best, best_sh, signal = current_bias(w_all, last_idx, fee, min_train,
+                                               min_active, long_only)
+    return {"w": w, "sig": sig, "ret": ret, "rule_tbl": rule_tbl, "split": split,
+            "pos": pos, "chosen": chosen, "agent_r": agent_r, "oos": oos, "bh": bh,
+            "agent_stats": stats(agent_r.iloc[oos], pos), "bh_stats": stats(bh),
+            "picks": chosen.iloc[oos].value_counts(),
+            "week": week, "rule": best, "rule_sharpe": best_sh, "signal": signal}
+
+
 # ----------------------------------------------------------------------------- rapor
 def pct(x):
     return "—" if x is None or (isinstance(x, float) and math.isnan(x)) else f"{x * 100:.2f}%"
@@ -273,35 +306,15 @@ def main():
     a = ap.parse_args()
 
     daily = fetch_daily(a.symbol, a.source)
-    w_all = to_weekly(daily)
-    now = pd.Timestamp.now(tz="UTC")
-    complete = w_all[(w_all.index + pd.Timedelta(weeks=1)) <= now]
-    complete = complete[complete["days"] == 7]
-    w = complete
-
-    sig, ret = bias_rules(w)
-    if a.long_only:
-        sig = sig.clip(lower=0)
-
-    split = int(len(w) * 0.7)
-    rule_tbl = []
-    for k in sig:
-        r = strat_returns(sig[k], ret, a.fee)
-        rule_tbl.append((k, stats(r.iloc[:split], sig[k]), stats(r.iloc[split:], sig[k])))
-    rule_tbl.sort(key=lambda x: x[1]["sharpe"], reverse=True)
-
-    pos, chosen, agent_r = walk_forward(sig, ret, a.fee, a.min_train, a.min_active)
-    oos = slice(a.min_train, None)
-    bh = ret.iloc[oos]
-    agent_s = stats(agent_r.iloc[oos], pos)
-    bh_s = stats(bh)
-
-    last_idx = w_all.index.get_loc(w.index[-1])
-    week, best, best_sh, signal = current_bias(w_all, last_idx, a.fee, a.min_train,
-                                               a.min_active, a.long_only)
+    res = analyze(daily, a.fee, a.long_only, a.min_train, a.min_active)
+    w, sig, ret, rule_tbl, split = res["w"], res["sig"], res["ret"], res["rule_tbl"], res["split"]
+    pos, chosen, agent_r = res["pos"], res["chosen"], res["agent_r"]
+    agent_s, bh_s, oos, bh = res["agent_stats"], res["bh_stats"], res["oos"], res["bh"]
+    week, best, best_sh, signal = res["week"], res["rule"], res["rule_sharpe"], res["signal"]
     label = {1: "LONG (yükseliş) 🟢", -1: "SHORT (düşüş) 🔴", 0: "NÖTR ⚪"}[signal]
     wd = weekday_profile(daily)
-    picks = chosen.iloc[oos].value_counts()
+    picks = res["picks"]
+    now = pd.Timestamp.now(tz="UTC")
 
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
