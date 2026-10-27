@@ -7,7 +7,9 @@ walk-forward yöntemiyle backtest eden ajan.
 |---|---|
 | `agent.py` | Tek coin: veri, kurallar, walk-forward backtest, rapor |
 | `scan.py` | Top 50 coin listesi + her coin için bias ve backtest özeti |
-| `test_agent.py` | Doğruluk testleri (`python3 -m unittest -v test_agent`) |
+| `rr_study.py` | Bias yönüyle TP/SL (2R/1R) stop mesafesi hassasiyet çalışması |
+| `reversal_agent.py` | Dönüş noktası ajanı: fiyatın döndüğü yerlerde ortak özellik arar |
+| `test_agent.py`, `test_reversal.py` | Doğruluk testleri (`python3 -m unittest -v test_agent test_reversal`) |
 
 ```bash
 python3 agent.py --symbol BTCUSDT                       # long/short, sabit 1x
@@ -67,3 +69,26 @@ stop emirli giriş gerektirir; bu model yalnızca haftanın açılış-kapanış
 Fonlama ücreti (perp), kayma ve spread modellenmez. Kural seti ve varsayılan ayarlar
 (long-only, %50 vol hedefi) aynı veri üzerinde seçildiği için sonuçlar hafif iyimserdir.
 Yatırım tavsiyesi değildir.
+
+## Dönüş noktası ajanı (`reversal_agent.py`)
+
+```bash
+python3 reversal_agent.py --list reports/top50_<tarih>.csv   # ~3 dk
+python3 reversal_agent.py --symbols BTCUSDT ETHUSDT --swing-atr 3
+```
+
+1. Günlük grafikte ATR tabanlı zigzag ile dönüşler bulunur: bir tepe/dip, fiyat ondan
+   `--swing-atr` × ATR(14) (varsayılan 4) ters yöne gidince onaylanır.
+2. Her gün için dip (günün low'u) ve tepe (günün high'ı) tarafında özellikler hesaplanır:
+   önceki gün/hafta/ay ucu, haftalık/aylık açılış, eski swing seviyeleri (aynı ve ters yön),
+   yuvarlak sayılar, SMA20/50/200, 20 haftalık SMA, Fibonacci bölgeleri (son tamamlanmış
+   bacak), RSI aşırılığı, SMA20'den uzaklık, hacim patlaması, uzun fitil, geniş mum, önceki
+   hafta ucunu / eski swing'i süpürüp geri kapanış, ardışık mumlar, haftanın günü. Seviyeye
+   "değme" = 0.25 ATR tolerans. Seviyeler yalnızca o günden önce bilinen veriden gelir.
+3. Lift = dönüş günlerindeki sıklık / tüm günlerdeki sıklık. Binom testi + Benjamini-Hochberg,
+   coinler arası tutarlılık, ilk %70 / son %30 dönem tekrarı ve zigzag'dan bağımsız olarak
+   özellik görülen günden 10 gün sonraki getiri raporlanır.
+
+Not: dönüşler hareketin en uç günü olduğundan "SMA20'den uzak", "RSI aşırı", "geniş mum"
+gibi özellikler dönüşlerde kısmen mekanik olarak sık görülür; ileriye dönük getiri sütunu bu
+yüzden asıl sınamadır.
