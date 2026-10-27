@@ -107,7 +107,9 @@ def summarize(res, enough):
     return {"signal": res["signal"], "rule": res["rule"] or "-", "size": res["size"],
             "ret": g(ag, "total_return"), "sharpe": g(ag, "sharpe"), "dd": g(ag, "max_dd"),
             "psr": g(ag, "psr"), "bh_ret": g(bh, "total_return"), "bh_sharpe": g(bh, "sharpe"),
-            "bh_dd": g(bh, "max_dd"), "dsr": res["dsr"] if enough else None}
+            "bh_dd": g(bh, "max_dd"), "dsr": res["dsr"] if enough else None,
+            "up_prob": res["prob"]["up_prob"], "ci_low": res["prob"]["ci_low"],
+            "ci_high": res["prob"]["ci_high"], "n": res["prob"]["n"]}
 
 
 def main():
@@ -148,8 +150,10 @@ def main():
         except Exception as e:
             row.update({"bias_signal": None, "note": f"hata: {e}"})
         results.append(row)
+        up = row.get("bias_up_prob")
         print(f"{c.rank:>2}. {c.symbol:<8} {BIAS_TXT.get(row.get('bias_signal'), '?'):<9} "
-              f"{row.get('bias_rule', '')} | işlem: {row.get('trade_size', 0) or 0:.2f}x "
+              f"yükseliş %{(up or 0) * 100:.0f} {row.get('bias_rule', '')} | "
+              f"işlem: %{(row.get('trade_size') or 0) * 100:.0f} "
               f"{row.get('note', '')}")
         time.sleep(0.2)
 
@@ -165,6 +169,10 @@ def main():
 
     def signif(mode):
         return int((bt[f"{mode}_psr"] >= 0.95).sum())
+
+    def pp(r, k):
+        v = r.get(k)
+        return "—" if v is None or pd.isna(v) else f"%{v * 100:.0f}"
 
     def num(r, k, f="{:.2f}"):
         v = r.get(k)
@@ -189,26 +197,39 @@ def main():
         "**Yön bias'ı dağılımı:** " + ", ".join(f"{k}: {v}" for k, v in counts.items()),
         "",
         f"**Bu hafta işlem modunda long önerilenler ({len(longs)}):** " +
-        (", ".join(f"{r.symbol} ({r.trade_size:.2f}x)" for r in longs.itertuples()) or "yok"),
+        (", ".join(f"{r.symbol} (%{r.trade_size * 100:.0f})" for r in longs.itertuples()) or "yok"),
+        "",
+        "**Yükseliş olasılığı en yüksek 10** (n ≥ 20): " + ", ".join(
+            f"{r.symbol} %{r.bias_up_prob * 100:.0f}"
+            for r in df[df["bias_n"].fillna(0) >= 20].nlargest(10, "bias_up_prob").itertuples()),
+        "",
+        "**Yükseliş olasılığı en düşük 10** (n ≥ 20): " + ", ".join(
+            f"{r.symbol} %{r.bias_up_prob * 100:.0f}"
+            for r in df[df["bias_n"].fillna(0) >= 20].nsmallest(10, "bias_up_prob").itertuples()),
         "",
         f"Backtesti olan {len(bt)} coinde Sharpe'ı buy & hold'u geçen: L/S {beat('bias')}, "
         f"işlem modu {beat('trade')}. PSR ≥ %95 olan: L/S {signif('bias')}, "
         f"işlem modu {signif('trade')}.",
         "",
-        "| # | Coin | Yön bias'ı | Kural | İşlem | Hafta | L/S getiri | L/S SR | L/S DD | "
+        "| # | Coin | Yükseliş olasılığı | %95 aralık | n | Yön bias'ı | Kural | İşlem pozisyonu | Hafta | L/S getiri | L/S SR | L/S DD | "
         "İşlem getiri | İşlem SR | İşlem DD | İşlem PSR | B&H getiri | B&H SR | B&H DD | Not |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         size = r.get("trade_size") or 0
         md.append(
-            f"| {r['rank']} | {r['symbol']} | {BIAS_TXT.get(r.get('bias_signal'), '?')} | "
-            f"`{r.get('bias_rule', '-')}` | {'LONG ' + format(size, '.2f') + 'x' if size > 0 else '—'} | "
+            f"| {r['rank']} | {r['symbol']} | {pp(r, 'bias_up_prob')} | "
+            f"{pp(r, 'bias_ci_low')}–{pp(r, 'bias_ci_high')} | {r.get('bias_n', '—')} | "
+            f"{BIAS_TXT.get(r.get('bias_signal'), '?')} | "
+            f"`{r.get('bias_rule', '-')}` | {'LONG %' + format(size * 100, '.0f') if size > 0 else '—'} | "
             f"{r.get('weeks', '—')} | {p(r, 'bias_ret')} | {num(r, 'bias_sharpe')} | "
             f"{p(r, 'bias_dd')} | {p(r, 'trade_ret')} | {num(r, 'trade_sharpe')} | "
             f"{p(r, 'trade_dd')} | {p(r, 'trade_psr').lstrip('+')} | {p(r, 'bias_bh_ret')} | "
             f"{num(r, 'bias_bh_sharpe')} | {p(r, 'bias_bh_dd')} | {r.get('note', '')} |")
-    md += ["", "> Tüm getiri/SR/DD sütunları walk-forward örneklem dışı sonuçlardır. "
+    md += ["", "> Yükseliş olasılığı = seçilen kuralın bu haftaki sinyali geçmişte verildiğinde "
+           "haftaların yüzde kaçının yükselişle kapandığı (n = o hafta sayısı, aralık = Wilson %95). "
+           "İşlem pozisyonu = sermayenin yüzde kaçıyla long (yalnız long, vol hedefli mod).",
+           "Tüm getiri/SR/DD sütunları walk-forward örneklem dışı sonuçlardır. "
            "PSR = gerçek Sharpe'ın 0'dan büyük olma olasılığı; < %95 anlamlı sayılmaz. "
            "Fonlama ücreti ve kayma dahil değildir. Yatırım tavsiyesi değildir."]
     md_text = "\n".join(md)

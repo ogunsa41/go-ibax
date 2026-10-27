@@ -174,6 +174,32 @@ class TestRules(unittest.TestCase):
         self.assertEqual(self.last_signal(rows, "premium_discount_4w"), 1)
 
 
+class TestUpProbability(unittest.TestCase):
+    def test_conditional_frequency_and_no_future_data(self):
+        w = agent.complete_weeks(agent.to_weekly(synthetic_daily(120)),
+                                 pd.Timestamp("2100-01-01", tz="UTC"))
+        p = agent.up_probability(w, "momentum_1w")
+        sig, mkt = agent.bias_rules(w)
+        state = int(np.sign(mkt["ret"].iloc[-1]))  # bu haftanın sinyali = son haftanın yönü
+        self.assertEqual(p["state"], state)
+        hist = mkt["ret"][sig["momentum_1w"] == state]
+        self.assertEqual(p["n"], len(hist))
+        self.assertAlmostEqual(p["up_prob"], (hist > 0).mean())
+        self.assertLessEqual(p["ci_low"], p["up_prob"])
+        self.assertGreaterEqual(p["ci_high"], p["up_prob"])
+
+    def test_no_rule_gives_base_rate(self):
+        w = agent.complete_weeks(agent.to_weekly(synthetic_daily(60)),
+                                 pd.Timestamp("2100-01-01", tz="UTC"))
+        p = agent.up_probability(w, None)
+        self.assertAlmostEqual(p["up_prob"], p["base_rate"])
+
+    def test_wilson(self):
+        lo, hi = agent.wilson(50, 100)
+        self.assertAlmostEqual(lo, 0.4038, places=3)
+        self.assertAlmostEqual(hi, 0.5962, places=3)
+
+
 class TestStatistics(unittest.TestCase):
     def test_psr_increases_with_sharpe(self):
         rng = np.random.default_rng(1)

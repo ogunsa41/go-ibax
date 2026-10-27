@@ -338,6 +338,39 @@ def next_week_signal(w, fee, min_active, long_only, lookback=0, vol_target=None)
     return nxt.index[0], best, best_s, int(sig[best].iloc[i]), size
 
 
+def wilson(k, n, z=1.96):
+    """Başarı oranı için Wilson %95 güven aralığı."""
+    if n == 0:
+        return float("nan"), float("nan")
+    ph = k / n
+    mid = (ph + z * z / (2 * n)) / (1 + z * z / n)
+    half = z * math.sqrt(ph * (1 - ph) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return mid - half, mid + half
+
+
+def up_probability(w, rule):
+    """Bu haftanın yükseliş olasılığı (yüzdelik bias).
+
+    Seçilen kuralın bu hafta için verdiği sinyal durumu (+1/0/-1) geçmişte hangi haftalarda
+    oluştuysa, o haftaların yüzde kaçı yükselişle kapandı. Kural yoksa tüm haftaların oranı.
+    Yalnızca tamamlanmış haftalar kullanılır.
+    """
+    nxt = w.iloc[[-1]].copy()
+    nxt.index = nxt.index + pd.Timedelta(weeks=1)
+    sig, mkt = bias_rules(pd.concat([w, nxt]))
+    ret = mkt["ret"].iloc[:-1]
+    if rule:
+        state = int(sig[rule].iloc[-1])
+        hist = ret[sig[rule].iloc[:-1] == state]
+    else:
+        state, hist = None, ret
+    n, k = len(hist), int((hist > 0).sum())
+    lo, hi = wilson(k, n)
+    return {"up_prob": k / n if n else float("nan"), "ci_low": lo, "ci_high": hi, "n": n,
+            "avg_ret": float(hist.mean()) if n else float("nan"), "state": state,
+            "base_rate": float((ret > 0).mean())}
+
+
 def weekday_profile(daily):
     r = (daily["close"] / daily["open"] - 1).to_frame("ret")
     r["day"] = r.index.day_name()
@@ -374,7 +407,8 @@ def analyze(daily, fee=0.001, long_only=False, min_train=52, min_active=20,
 
     week, best, best_sh, signal, size = next_week_signal(w, fee, min_active, long_only,
                                                          lookback, vol_target)
-    return {"w": w, "sig": sig, "ret": mkt["ret"], "mkt": mkt, "rule_tbl": rule_tbl,
+    prob = up_probability(w, best)
+    return {"w": w, "sig": sig, "ret": mkt["ret"], "mkt": mkt, "rule_tbl": rule_tbl, "prob": prob,
             "split": split, "best_train": best_train, "dsr": dsr,
             "pos": pos, "chosen": chosen, "agent_r": agent_r, "oos": oos, "bh": bh,
             "agent_stats": stats(agent_r.iloc[oos], pos), "bh_stats": stats(bh),
@@ -447,7 +481,7 @@ def main():
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     stamp = now.strftime("%Y-%m-%d")
-    size_txt = f", pozisyon büyüklüğü {res['size']:.2f}x" if a.vol_target and best else ""
+    size_txt = f", pozisyon büyüklüğü %{res['size'] * 100:.0f}" if a.vol_target and best else ""
     md = [
         f"# Haftalık Bias Raporu — {a.symbol} ({stamp})",
         "",
@@ -457,6 +491,12 @@ def main():
         f"kural seçimi {'son ' + str(a.lookback) + ' hafta' if a.lookback else 'tüm geçmiş'}.",
         "",
         f"## Bu haftanın bias'ı ({week.date()} haftası)",
+        f"**Yükseliş olasılığı: %{res['prob']['up_prob'] * 100:.0f}** "
+        f"(%95 aralık %{res['prob']['ci_low'] * 100:.0f}–%{res['prob']['ci_high'] * 100:.0f}, "
+        f"geçmişte aynı sinyalin verildiği {res['prob']['n']} hafta, o haftaların ort. getirisi "
+        f"{pct(res['prob']['avg_ret'])}; tüm haftalarda yükseliş oranı "
+        f"%{res['prob']['base_rate'] * 100:.0f})",
+        "",
         f"**{label}** — seçilen kural: `{best}` (geçmiş Sharpe {best_sh:.2f}{size_txt})" if best else
         f"**{label}** — hiçbir kural geçmişte pozitif Sharpe vermedi, bias yok.",
         "",
