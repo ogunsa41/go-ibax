@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Haftalık Bias Ajanı.
 
-1. Crypto.com Exchange'den günlük mumları çeker, haftalık mumlara (Pzt 00:00 UTC) çevirir.
+1. Binance'ten (varsayılan) veya Crypto.com'dan günlük mumları çeker, haftalık mumlara (Pzt 00:00 UTC) çevirir.
 2. Birkaç aday "haftalık bias" kuralını hesaplar (yalnızca geçmiş haftaların verisiyle,
    ileriye bakma yok).
 3. Walk-forward: her hafta, o güne kadarki veride en iyi Sharpe'a sahip kuralı seçer ve
@@ -11,8 +11,9 @@
 5. Bu haftanın bias'ını ve bir Markdown + HTML rapor üretir.
 
 Kullanım:
-    python3 agent.py --symbol BTC_USDT
-    python3 agent.py --symbol ETH_USDT --long-only --fee 0.001
+    python3 agent.py --symbol BTCUSDT
+    python3 agent.py --symbol ETHUSDT --long-only --fee 0.001
+    python3 agent.py --source cryptocom --symbol BTC_USDT
 """
 import argparse
 import json
@@ -26,12 +27,55 @@ import numpy as np
 import pandas as pd
 
 API = "https://api.crypto.com/exchange/v1/public/get-candlestick"
+# api.binance.com bazı bölgelerde (ör. ABD) 451 döner; data-api.binance.vision aynı
+# public piyasa verisini sunan resmi aynadır.
+BINANCE_HOSTS = ["https://api.binance.com", "https://data-api.binance.vision"]
 DAY_MS = 86_400_000
 
 
 # ----------------------------------------------------------------------------- veri
-def fetch_daily(symbol, max_pages=20):
-    """Günlük mumları geriye doğru sayfalayarak çeker."""
+def fetch_daily(symbol, source="binance"):
+    if source == "binance":
+        return fetch_binance(symbol)
+    return fetch_cryptocom(symbol)
+
+
+def _binance_get(path):
+    err = None
+    for host in BINANCE_HOSTS:
+        try:
+            with urllib.request.urlopen(host + path, timeout=30) as r:
+                return json.load(r)
+        except Exception as e:  # 451 coğrafi engel vb. -> sıradaki host
+            err = e
+    raise RuntimeError(f"Binance'e ulaşılamadı: {err}")
+
+
+def fetch_binance(symbol):
+    """Binance spot günlük mumlarını en baştan itibaren 1000'erli sayfalarla çeker."""
+    symbol = symbol.replace("_", "").replace("/", "").upper()
+    rows, start = [], 0
+    while True:
+        data = _binance_get(f"/api/v3/klines?symbol={symbol}&interval=1d"
+                            f"&startTime={start}&limit=1000")
+        if not data:
+            break
+        rows += data
+        if len(data) < 1000:
+            break
+        start = data[-1][0] + DAY_MS
+    if not rows:
+        raise RuntimeError(f"{symbol} için Binance verisi bulunamadı")
+    df = pd.DataFrame([r[:6] for r in rows],
+                      columns=["t", "open", "high", "low", "close", "volume"])
+    df["t"] = pd.to_datetime(df["t"], unit="ms", utc=True)
+    df = df.drop_duplicates("t").set_index("t").sort_index().astype(float)
+    # Henüz kapanmamış bugünkü mumu at
+    return df[df.index + pd.Timedelta(days=1) <= pd.Timestamp.now(tz="UTC")]
+
+
+def fetch_cryptocom(symbol, max_pages=20):
+    """Crypto.com günlük mumlarını geriye doğru sayfalayarak çeker."""
     rows, end = {}, int(time.time() * 1000)
     for _ in range(max_pages):
         url = (f"{API}?instrument_name={symbol}&timeframe=1D&count=300"
@@ -219,7 +263,8 @@ def svg_equity(curves, width=900, height=320):
 
 def main():
     ap = argparse.ArgumentParser(description="Haftalık bias bulucu + backtest ajanı")
-    ap.add_argument("--symbol", default="BTC_USDT")
+    ap.add_argument("--source", choices=["binance", "cryptocom"], default="binance")
+    ap.add_argument("--symbol", default="BTCUSDT", help="Binance: BTCUSDT, Crypto.com: BTC_USDT")
     ap.add_argument("--fee", type=float, default=0.001, help="pozisyon değişimi başına maliyet (0.001=%%0.1)")
     ap.add_argument("--long-only", action="store_true", help="short sinyallerini nötr say")
     ap.add_argument("--min-train", type=int, default=52, help="walk-forward ısınma süresi (hafta)")
@@ -227,7 +272,7 @@ def main():
     ap.add_argument("--out", default=str(Path(__file__).parent / "reports"))
     a = ap.parse_args()
 
-    daily = fetch_daily(a.symbol)
+    daily = fetch_daily(a.symbol, a.source)
     w_all = to_weekly(daily)
     now = pd.Timestamp.now(tz="UTC")
     complete = w_all[(w_all.index + pd.Timedelta(weeks=1)) <= now]
@@ -264,7 +309,7 @@ def main():
     md = [
         f"# Haftalık Bias Raporu — {a.symbol} ({stamp})",
         "",
-        f"Veri: {w.index[0].date()} → {w.index[-1].date()} ({len(w)} tamamlanmış hafta), "
+        f"Kaynak: {a.source}. Veri: {w.index[0].date()} → {w.index[-1].date()} ({len(w)} tamamlanmış hafta), "
         f"maliyet {a.fee * 100:.2f}%/değişim, {'yalnız long' if a.long_only else 'long/short'}.",
         "",
         f"## Bu haftanın bias'ı ({week.date()} haftası)",
