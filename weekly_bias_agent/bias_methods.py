@@ -134,12 +134,43 @@ def liquidity_to_imbalance(daily):
 
 
 # ----------------------------------------------------------------------------- değerlendirme
+def distance_curve(bars, bins=20):
+    """Yönden bağımsız taban: açılıştan önceki mumun ucuna olan mesafe (ATR biriminde) ile o
+    ucun alınma olasılığı ilişkisi. Yukarı ve aşağı uçlar birlikte kullanılır."""
+    o, h, l, c = bars["open"], bars["high"], bars["low"], bars["close"]
+    pc = c.shift(1)
+    tr = pd.concat([h - l, (h - pc).abs(), (l - pc).abs()], axis=1).max(axis=1)
+    a = tr.rolling(14, min_periods=1).mean().shift(1)  # ilk mumlarda da tanımlı
+    d_hi = ((h.shift(1) - o) / a).clip(lower=0)
+    d_lo = ((o - l.shift(1)) / a).clip(lower=0)
+    hit_hi, hit_lo = h > h.shift(1), l < l.shift(1)
+    d = pd.concat([d_hi, d_lo])
+    hit = pd.concat([hit_hi, hit_lo])
+    m = d.notna()
+    d, hit = d[m].values, hit[m].values.astype(float)
+    if len(d) < bins * 5:
+        return d_hi, d_lo, lambda x: np.full(len(x), np.nan)
+    edges = np.unique(np.quantile(d, np.linspace(0, 1, bins + 1)))
+    idx = np.clip(np.searchsorted(edges, d, side="right") - 1, 0, len(edges) - 2)
+    rate = np.array([hit[idx == i].mean() if (idx == i).any() else np.nan
+                     for i in range(len(edges) - 1)])
+
+    def g(x):
+        x = np.asarray(x, float)
+        j = np.clip(np.searchsorted(edges, x, side="right") - 1, 0, len(edges) - 2)
+        return np.where(np.isnan(x), np.nan, rate[j])
+    return d_hi, d_lo, g
+
+
 def evaluate(sig, bars):
     """Sinyalin yön ve hedef isabeti için sayımlar (havuzlanabilir)."""
     o, h, l, c = (bars[k] for k in ("open", "high", "low", "close"))
     up, dn = c > o, c < o
     take_hi, take_lo = h > h.shift(1), l < l.shift(1)
+    d_hi, d_lo, g = distance_curve(bars)
+    e_hi, e_lo = pd.Series(g(d_hi.values), index=bars.index), pd.Series(g(d_lo.values), index=bars.index)
     ok = h.shift(1).notna()
+    okx = ok & e_hi.notna() & e_lo.notna()  # mesafe karşılaştırması yapılabilen mumlar
     s = sig.reindex(bars.index).fillna(0)
     L, S = (s == 1) & ok, (s == -1) & ok
     return {
@@ -148,6 +179,12 @@ def evaluate(sig, bars):
         "long_tgt": int((L & take_hi).sum()), "short_tgt": int((S & take_lo).sum()),
         # ters uç: long'da önceki low'un, short'ta önceki high'ın alınması
         "long_opp": int((L & take_lo).sum()), "short_opp": int((S & take_hi).sum()),
+        # mesafeye göre beklenen (yönden bağımsız), yalnız okx mumlarında
+        "x_calls": int((L & okx).sum() + (S & okx).sum()),
+        "x_tgt": int((L & okx & take_hi).sum() + (S & okx & take_lo).sum()),
+        "x_opp": int((L & okx & take_lo).sum() + (S & okx & take_hi).sum()),
+        "exp_tgt": float(e_hi[L & okx].sum() + e_lo[S & okx].sum()),
+        "exp_opp": float(e_lo[L & okx].sum() + e_hi[S & okx].sum()),
         "up": int((up & ok).sum()), "down": int((dn & ok).sum()),
         "take_hi": int((take_hi & ok).sum()), "take_lo": int((take_lo & ok).sum()),
         # şans seviyesi için sinyal verilen mumlardaki yükseliş sayısı
@@ -180,8 +217,23 @@ def summarize(counts):
         "short_tgt": k["short_tgt"] / k["short"] if k["short"] else float("nan"),
         "base_hi": base_hi, "base_lo": base_lo,
         "opp": (k["long_opp"] + k["short_opp"]) / calls if calls else float("nan"),
+        "x_tgt": k["x_tgt"] / k["x_calls"] if k["x_calls"] else float("nan"),
+        "x_opp": k["x_opp"] / k["x_calls"] if k["x_calls"] else float("nan"),
+        "exp_tgt": k["exp_tgt"] / k["x_calls"] if k["x_calls"] else float("nan"),
+        "exp_opp": k["exp_opp"] / k["x_calls"] if k["x_calls"] else float("nan"),
+        "p_tgt_vs_exp": _excess_p(k["x_tgt"], k["exp_tgt"], k["x_calls"]),
         "p_vs_opp": _paired_p(k["long_tgt"] + k["short_tgt"], k["long_opp"] + k["short_opp"], calls),
     }
+
+
+def _excess_p(k, expected, n):
+    """Gözlenen isabet sayısının mesafe tabanlı beklentiyi aşması için tek yönlü z testi."""
+    if not n:
+        return float("nan")
+    p = expected / n
+    if not 0 < p < 1:
+        return float("nan")
+    return 1 - N.cdf((k - expected) / math.sqrt(n * p * (1 - p)))
 
 
 def _paired_p(a, b, n):
@@ -248,13 +300,16 @@ def report(results, cases, symbols, stamp):
         "rastgele tahminin beklenen isabeti. **Hedef ucu alındı** = long'da mumun önceki mumun "
         "high'ını, short'ta low'unu alması; **ters uç alındı** = aynı mumlarda karşı ucun "
         "alınması. Bias gerçekten yön biliyorsa hedef ucu ters uçtan belirgin şekilde sık "
-        "alınmalı (iç mumdan sonra iki uç da sık alınır; bu yön bilgisi değildir). "
-        "**Koşulsuz taban** = sinyalden bağımsız olarak her mumun önceki mumun aynı ucunu "
-        "alma oranı. p < 0.05 anlamlı.",
+        "alınmalı. **Mesafeye göre beklenen** = yönden bağımsız taban: tüm mumlardan, açılışın "
+        "önceki mumun ucuna (ATR cinsinden) uzaklığına göre o ucun alınma olasılığı çıkarılır ve "
+        "her sinyalin kendi mesafesine uygulanır. Mum önceki high'ın üstünde kapandıysa yeni mum "
+        "hedefe çok yakın açılır; hedefin sık alınması bu durumda yön bilgisi değil, mesafedir. "
+        "Bias gerçekten yön biliyorsa hedef ucu bu beklentiden sık, ters uç bu beklentiden "
+        "seyrek alınmalı. p < 0.05 anlamlı.",
         "",
         "| Yöntem | Sinyal verilen mum | Yön isabeti | Şans | p | LONG / SHORT isabeti | "
-        "Hedef ucu alındı | Ters uç alındı | p (hedef > ters) | Koşulsuz taban | "
-        "Eğitim → Test yön isabeti | Şansı geçen coin |",
+        "Hedef ucu alındı | Mesafeye göre beklenen | p (hedef > beklenen) | Ters uç alındı | "
+        "Mesafeye göre beklenen | Eğitim → Test yön isabeti | Şansı geçen coin |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for name, _ in METHODS:
@@ -266,17 +321,20 @@ def report(results, cases, symbols, stamp):
         lines.append(
             f"| {name} | {pct(a['coverage'], 0)} ({a['calls']}) | **{pct(a['acc'])}** | {pct(a['chance'])} | "
             f"{a['p_dir']:.3f} | {pct(a['long_acc'], 0)} ({a['long_n']}) / {pct(a['short_acc'], 0)} ({a['short_n']}) | "
-            f"**{pct(a['tgt'])}** | {pct(a['opp'])} | {a['p_vs_opp']:.3f} | {pct(a['tgt_base'])} | "
+            f"**{pct(a['x_tgt'])}** | {pct(a['exp_tgt'])} | {a['p_tgt_vs_exp']:.3f} | {pct(a['x_opp'])} | "
+            f"{pct(a['exp_opp'])} | "
             f"{pct(tr['acc'])} → {pct(te['acc'])} | {better}/{len(per)} |")
     lines += ["", "## Mum kapanışı / CRT — vaka bazında", "",
-              "| Zaman dilimi | Önceki mum | Mum sayısı | Verilen bias | Yön isabeti | Hedef ucu alındı | Ters uç alındı |",
-              "|---|---|---|---|---|---|---|"]
+              "| Zaman dilimi | Önceki mum | Mum sayısı | Verilen bias | Yön isabeti | Hedef ucu alındı | "
+              "Mesafeye göre beklenen | Ters uç alındı | Mesafeye göre beklenen |",
+              "|---|---|---|---|---|---|---|---|---|"]
     keys = sorted({k for c in cases.values() for k in c})
     for k in keys:
         per = [c[k] for c in cases.values() if k in c]
         s = summarize(per)
         side = "LONG" if s["long_n"] >= s["short_n"] else "SHORT"
-        lines.append(f"| {k[0]} | {k[1]} | {s['calls']} | {side} | {pct(s['acc'])} | {pct(s['tgt'])} | {pct(s['opp'])} |")
+        lines.append(f"| {k[0]} | {k[1]} | {s['calls']} | {side} | {pct(s['acc'])} | {pct(s['x_tgt'])} | "
+                     f"{pct(s['exp_tgt'])} | {pct(s['x_opp'])} | {pct(s['exp_opp'])} |")
     lines += ["", "> Yön isabeti %50 civarı ve p ≥ 0.05 ise yöntem yönü şanstan iyi bulmuyor demektir. "
               "Hedef ucu ters uçtan sık alınmıyorsa 'önceki mumun ucunu hedefler' iddiası yön "
               "bilgisi taşımıyor demektir. Giriş, stop ve alt zaman dilimi onayı (MSS, FVG girişi) "

@@ -87,6 +87,23 @@ class TestEvaluate(unittest.TestCase):
         s = bm.summarize([e])
         self.assertAlmostEqual(s["acc"], 2 / 3)
         self.assertAlmostEqual(s["opp"], 1 / 3)
+        self.assertEqual(e["x_calls"], 0)  # 4 mumda mesafe eğrisi kurulamaz
+
+    def test_distance_expectation_on_long_data(self):
+        d = synthetic_daily(200)
+        sig = pd.Series(1, index=d.index)
+        s = bm.summarize([bm.evaluate(sig, d)])
+        self.assertGreater(s["exp_tgt"], 0)
+        self.assertLess(abs(s["x_tgt"] - s["exp_tgt"]), 0.1)  # rastgele yürüyüşte beklentiye yakın
+
+
+class TestDistanceCurve(unittest.TestCase):
+    def test_closer_extremes_are_hit_more(self):
+        d = synthetic_daily(200)
+        d_hi, d_lo, g = bm.distance_curve(d)
+        near, far = g(np.array([0.0]))[0], g(np.array([3.0]))[0]
+        self.assertGreater(near, far)
+        self.assertGreater(near, 0.9)  # açılış zaten ucun ötesindeyse uç alınmış sayılır
 
 
 if __name__ == "__main__":
