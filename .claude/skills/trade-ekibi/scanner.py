@@ -944,6 +944,12 @@ def main():
         with open(os.path.join(a.out, f"d{j}.json"), "w") as f:
             json.dump({"zaman": now, "coinler": {o["s"]: temizle(d) for o, d in grup}}, f,
                       ensure_ascii=False, separators=(",", ":"))
+    try:  # ana yatırım sistemi (BTC trend) sinyali; CRT taramasından bağımsız
+        import yatirim
+        with open(os.path.join(a.out, "yatirim.json"), "w") as f:
+            json.dump(yatirim.uret(), f, ensure_ascii=False, separators=(",", ":"))
+    except (SystemExit, OSError, ValueError) as e:
+        print(f"yatirim sinyali üretilemedi: {e}", file=sys.stderr)
     say = {}
     for o, _ in sonuc:
         say[o["kat"]] = say.get(o["kat"], 0) + 1

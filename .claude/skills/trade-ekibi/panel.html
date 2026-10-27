@@ -110,17 +110,87 @@ tr.sel td{background:var(--accent-soft)}
 .tag.go{background:var(--bull-soft);color:var(--bull)} .tag.wait{background:var(--accent-soft);color:var(--warn)} .tag.no{background:var(--bear-soft);color:var(--bear)}
 .sym{font-weight:600}
 .stale{color:var(--bear);font-weight:600}
+/* ana sistem: BTC trend */
+.inv{display:grid;gap:14px;border-left:6px solid var(--skip)}
+.inv.go{border-left-color:var(--bull)} .inv.cash{border-left-color:var(--warn)}
+.inv-top{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between}
+.inv-sig{display:grid;gap:2px;min-width:0}
+.inv-sig .big{font-family:var(--f-display);font-weight:800;font-size:2rem;line-height:1.05;letter-spacing:-.01em}
+.inv.go .inv-sig .big{color:var(--bull)} .inv.cash .inv-sig .big{color:var(--warn)}
+.inv-sig .why{color:var(--muted);max-width:62ch}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px 18px;flex:1 1 360px}
+.kv div{display:grid;gap:1px}
+.kv b{font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-weight:500;font-size:1.02rem}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.howto{margin:0;padding-left:20px;display:grid;gap:4px;font-size:.86rem;max-width:72ch}
+.pos{color:var(--bull)} .neg{color:var(--bear)}
+.divider{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:18px}
 </style>
 
 <div class="wrap">
   <header>
     <div class="brand">
-      <h1>CRT Trade Masası</h1>
-      <p>Binance top 50 · haftalık bias → 4H key level → 4H CRT → 15m CHoCH → 15m giriş → kontrol</p>
-      <p class="stale">Backtest: bu kurallar son 6 ayda komisyon sonrası zarar ettirdi. Sinyaller yalnızca izleme amaçlıdır.</p>
+      <h1>Trade Masası</h1>
+      <p>Ana sistem: BTC trend takibi (spot, kaldıraçsız) · altta deneysel CRT taraması</p>
     </div>
     <div class="note" id="meta">Tarama verisi bekleniyor…</div>
   </header>
+
+  <section class="panel inv" id="inv" aria-label="Ana sistem">
+    <div class="inv-top">
+      <div class="inv-sig">
+        <span class="lbl">Ana sistem · BTC 100 günlük trend</span>
+        <span class="big" id="iBig">—</span>
+        <span class="why" id="iWhy">Sinyal verisi bekleniyor…</span>
+      </div>
+      <div class="kv" id="iKv"></div>
+    </div>
+    <div class="two">
+      <div>
+        <div class="chart-head"><h2>BTC günlük kapanış ve 100 günlük ortalama</h2>
+          <div class="legend"><span><i style="background:var(--ink)"></i>Kapanış</span><span><i style="background:var(--accent)"></i>100g ortalama</span></div></div>
+        <canvas id="cPx" aria-label="BTC fiyatı ve 100 günlük ortalama"></canvas>
+      </div>
+      <div>
+        <div class="chart-head"><h2>1 USDT'nin yolculuğu (log ölçek)</h2>
+          <div class="legend"><span><i style="background:var(--bull)"></i>Sistem</span><span><i style="background:var(--skip)"></i>BTC al-tut</span></div></div>
+        <canvas id="cEq" aria-label="Sistem ve BTC al-tut sermaye eğrisi"></canvas>
+      </div>
+    </div>
+    <div class="two">
+      <div>
+        <h2>Geçmiş dönemler (komisyon dahil)</h2>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Dönem</th><th class="n">Sistem</th><th class="n">BTC al-tut</th><th class="n">Sistem en büyük düşüş</th><th class="n">BTC en büyük düşüş</th></tr></thead>
+          <tbody id="iDon"></tbody>
+        </table></div>
+      </div>
+      <div>
+        <h2>Son işlemler</h2>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Alış</th><th>Satış</th><th class="n">Alış fiyatı</th><th class="n">Satış fiyatı</th><th class="n">Getiri</th></tr></thead>
+          <tbody id="iIsl"></tbody>
+        </table></div>
+        <p class="note" id="iIslNot"></p>
+      </div>
+    </div>
+    <div>
+      <h2>Nasıl uygulanır</h2>
+      <ol class="howto">
+        <li>Her gün 03:00'ten (Türkiye) sonra bu panele bakın; sinyal günlük kapanışla değişir.</li>
+        <li>Sinyal <b>AL</b> ise ayırdığınız parayla spot BTC alın ve tutun. <b>NAKİT</b> ise BTC'yi satıp USDT'de bekleyin.</li>
+        <li>Kaldıraç kullanmayın. Sistem geçmişte %36–60 düşüş yaşadı; kaybetmeyi göze alamayacağınız parayı koymayın.</li>
+        <li>İşlemlerin çoğu küçük zararla kapanır; kâr birkaç uzun trendden gelir. Kuralı tek tek işlemlere göre değiştirmeyin.</li>
+      </ol>
+      <p class="note">Geçmiş getiri gelecekteki getirinin garantisi değildir. Bu bir yatırım tavsiyesi değildir; kararlar ve risk size aittir.</p>
+    </div>
+  </section>
+
+  <div class="divider">
+    <h2>Deneysel · CRT taraması</h2>
+    <span class="stale">Backtest: CRT kuralları üç ayrı dönemde komisyon sonrası zarar etti. Bu sinyallerle işlem açmayın; yalnızca izleme içindir.</span>
+  </div>
 
   <section class="summary" id="summary" aria-label="Kategori filtreleri"></section>
 
@@ -316,6 +386,66 @@ function drawAll() {
   drawChart($("c15"), M, { zones: zones15, lines: lines15, marks: marks15 });
 }
 
+/* ---------- ana sistem ---------- */
+let yat = null;
+const gunT = t => new Date(t).toLocaleDateString("tr-TR", { day: "2-digit", month: "short", year: "numeric" });
+const yuzde = v => (v >= 0 ? "+" : "") + v.toFixed(1) + "%";
+function renderYatirim(y) {
+  yat = y;
+  const s = y.sinyal, al = s.durum === "AL";
+  $("inv").className = "panel inv " + (al ? "go" : "cash");
+  $("iBig").textContent = al ? "AL · BTC TUT" : "NAKİTTE KAL";
+  $("iWhy").textContent = al
+    ? `BTC günlük kapanışı ${fmt(s.kapanis, 0)}, 100 günlük ortalamanın (${fmt(s.sma, 0)}) %${s.fark.toFixed(1)} üstünde. Kapanış ortalamanın altına inerse sinyal NAKİT olur.`
+    : `BTC günlük kapanışı ${fmt(s.kapanis, 0)}, 100 günlük ortalamanın (${fmt(s.sma, 0)}) %${Math.abs(s.fark).toFixed(1)} altında. Kapanış ortalamanın üstüne çıkınca sinyal AL olur.`;
+  const kv = [["Sinyal süresi", s.gun + " gün"], ["Son kapanış", gunT(s.kapanisT)]];
+  if (y.acik) kv.push(["Açık işlem", `${gunT(y.acik.giris)} · ${fmt(y.acik.girisFiyat, 0)}`], ["Açık işlem getirisi", yuzde(y.acik.getiri)]);
+  const io = y.islemOzet;
+  kv.push(["Kazanan işlem", `${io.kazanan} / ${io.adet}`], ["Ort. kazanç / kayıp", `${yuzde(io.ortKazanc)} / ${yuzde(io.ortKayip)}`]);
+  $("iKv").replaceChildren(...kv.map(([k, v]) => el("div", {}, [el("span", { class: "lbl" }, k), el("b", { class: /^\+/.test(v) ? "pos" : /^-/.test(v) ? "neg" : "" }, v)])));
+  $("iDon").replaceChildren(...y.donemler.map(d => el("tr", {}, [
+    el("td", {}, `${d.bas.slice(0, 4)} – ${d.bit.slice(0, 4)}`),
+    el("td", { class: "n " + (d.sistem >= 0 ? "pos" : "neg") }, yuzde(d.sistem)),
+    el("td", { class: "n " + (d.btc >= 0 ? "pos" : "neg") }, yuzde(d.btc)),
+    el("td", { class: "n" }, d.sistemDD.toFixed(0) + "%"),
+    el("td", { class: "n" }, d.btcDD.toFixed(0) + "%")])));
+  const sat = y.acik ? [el("tr", {}, [el("td", {}, gunT(y.acik.giris)), el("td", {}, "açık"), el("td", { class: "n" }, fmt(y.acik.girisFiyat, 0)), el("td", { class: "n" }, "—"), el("td", { class: "n " + (y.acik.getiri >= 0 ? "pos" : "neg") }, yuzde(y.acik.getiri))])] : [];
+  $("iIsl").replaceChildren(...sat, ...y.islemler.slice(0, 8).map(x => el("tr", {}, [
+    el("td", {}, gunT(x.giris)), el("td", {}, gunT(x.cikis)),
+    el("td", { class: "n" }, fmt(x.girisFiyat, 0)), el("td", { class: "n" }, fmt(x.cikisFiyat, 0)),
+    el("td", { class: "n " + (x.getiri >= 0 ? "pos" : "neg") }, yuzde(x.getiri))])));
+  $("iIslNot").textContent = `2017'den beri ${io.adet} işlem. Veri: Binance spot BTCUSDT günlük, her taramada yeniden hesaplanır (${new Date(y.zaman).toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" })}).`;
+  drawYatirim();
+}
+function drawYatirim() {
+  if (!yat) return;
+  drawLines($("cPx"), [{ pts: yat.fiyat, color: "--ink", w: 1.4 }, { pts: yat.smaSeri, color: "--accent", w: 1.8 }], false, v => fmt(v, 0));
+  drawLines($("cEq"), [{ pts: yat.egri.map(r => [r[0], r[2]]), color: "--skip", w: 1.4 }, { pts: yat.egri.map(r => [r[0], r[1]]), color: "--bull", w: 2 }], true, v => v >= 10 ? v.toFixed(0) + "x" : v.toFixed(1) + "x");
+}
+function drawLines(cv, series, log, lab) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const all = series.flatMap(s => s.pts);
+  if (!all.length) return;
+  const padR = 64, padT = 10, padB = 22, cw = w - padR;
+  const f = v => log ? Math.log(v) : v;
+  let lo = Math.min(...all.map(p => f(p[1]))), hi = Math.max(...all.map(p => f(p[1])));
+  const m = (hi - lo) * 0.05 || 1; lo -= m; hi += m;
+  const t0 = Math.min(...all.map(p => p[0])), t1 = Math.max(...all.map(p => p[0]));
+  const X = t => (t - t0) / (t1 - t0 || 1) * cw, Y = v => padT + (hi - f(v)) / (hi - lo) * (h - padT - padB);
+  g.font = "11px " + css("--f-mono"); g.strokeStyle = css("--line"); g.fillStyle = css("--muted"); g.lineWidth = 1; g.textBaseline = "middle";
+  const ticks = log ? [0.5, 1, 2, 5, 10, 20, 50, 100].filter(v => f(v) > lo && f(v) < hi) : [0, 1, 2, 3, 4].map(k => lo + (hi - lo) * k / 4);
+  ticks.forEach(v => { const y = Y(v); g.globalAlpha = .6; g.beginPath(); g.moveTo(0, y); g.lineTo(cw, y); g.stroke(); g.globalAlpha = 1; g.fillText(lab(v), cw + 6, y); });
+  g.textBaseline = "alphabetic"; g.textAlign = "left"; g.fillText(gunT(t0), 0, h - 6); g.textAlign = "right"; g.fillText(gunT(t1), cw, h - 6); g.textAlign = "left";
+  series.forEach(s => {
+    g.strokeStyle = css(s.color); g.lineWidth = s.w; g.beginPath();
+    s.pts.forEach((p, i) => i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1]))); g.stroke();
+    const e = s.pts[s.pts.length - 1]; g.fillStyle = css(s.color); g.beginPath(); g.arc(X(e[0]), Y(e[1]), 3.5, 0, 7); g.fill();
+  });
+  g.lineWidth = 1;
+}
+
 /* ---------- ekibe sor ---------- */
 let sample = null;
 $("askBtn").addEventListener("click", async () => {
@@ -341,6 +471,7 @@ $("askBtn").addEventListener("click", async () => {
   db.collection("tarama").onSnapshot(snap => {
     const docs = {};
     snap.docs.forEach(s => { docs[s.id] = s.data(); });
+    if (docs.yatirim) renderYatirim(docs.yatirim);
     if (!docs.ozet) { $("meta").textContent = "Henüz tarama yapılmadı. İlk tarama birkaç dakika içinde yazılacak."; return; }
     ozet = docs.ozet; detay = docs;
     renderList();
@@ -408,8 +539,9 @@ function el(tag, attrs, kids) {
   if (kids != null) (Array.isArray(kids) ? kids : [kids]).forEach(k => e.append(k));
   return e;
 }
-let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(drawAll, 120); });
-new MutationObserver(drawAll).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", drawAll);
+const cizHepsi = () => { drawAll(); drawYatirim(); };
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(cizHepsi, 120); });
+new MutationObserver(cizHepsi).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", cizHepsi);
 })();
 </script>
