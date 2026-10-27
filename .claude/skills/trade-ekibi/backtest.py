@@ -209,7 +209,8 @@ def coin_test(args):
             if kat not in ("FVG_BEKLENIYOR", "TETIKLENDI", "SONUCLANDI"):
                 continue
             x = crt["aktif"]
-            anahtarlar = {("crt", x["yon"], x["sEnd"], en["zone"]["t"]), ("plan", en["yon"], en["giris"], en["sl"])}
+            # her CRT'den (aynı sweep mumu) yalnız 1 işlem; yeni bölge ya da yeni karakter değişimi ikinci işlem açmaz
+            anahtarlar = {("crt", x["yon"], x["sEnd"]), ("plan", en["yon"], en["giris"], en["sl"])}
             if anahtarlar & gorulen:
                 continue
             gorulen |= anahtarlar
