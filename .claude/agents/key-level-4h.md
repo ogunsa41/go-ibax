@@ -23,7 +23,7 @@ Bias `NEUTRAL` ise hiçbir şey arama, `"durum": "ATLANDI"` döndür.
 - Bias'a ters yöndeki seviyeleri listeye ALMA.
 
 ## Seviye kalitesi
-Her seviye için: tamamen doldurulmuş (mitigated) FVG'leri ve iki kez test edilmiş OB'leri ele.
+Geçerlilik: bir seviye yalnızca bir 4H mumun GÖVDESİ seviyenin uzak ucunun ötesinde kapanırsa geçersiz olur (bullish FVG/OB: alt ucun altında kapanış; likidite: seviyenin ötesinde kapanış). Fitille içine girmek ya da ötesine geçmek seviyeyi bozmaz; test sayısı önemli değildir.
 Birden fazla kavramın üst üste geldiği bölgeler (ör. OB + FVG + eşit low) "A" kalite.
 En fazla 4 seviye döndür, fiyata en yakından uzağa sırala.
 

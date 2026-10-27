@@ -328,32 +328,29 @@ def ajan_kl(c4, W, bias, price, now_ms=None):
     bull = bias == "BULLISH"
     cand = []
     avg = sum(body(m) for m in c) / len(c)
+    # Geçerlilik: seviye yalnız GÖVDE KAPANIŞI ile kırılınca biter; fitille içine/ötesine girmek seviyeyi bozmaz.
     for i in range(len(c) - 2):
         a, z, later = c[i], c[i + 2], c[i + 3:]
-        if bull and a["h"] < z["l"]:
-            dolum = min([m["l"] for m in later] + [z["l"]])
-            if dolum > a["h"] and a["h"] <= price:
-                cand.append({"tip": "FVG", "alt": a["h"], "ust": min(z["l"], dolum), "t": c[i + 1]["t"]})
-        if not bull and a["l"] > z["h"]:
-            dolum = max([m["h"] for m in later] + [z["h"]])
-            if dolum < a["l"] and a["l"] >= price:
-                cand.append({"tip": "FVG", "alt": max(z["h"], dolum), "ust": a["l"], "t": c[i + 1]["t"]})
+        if bull and a["h"] < z["l"] and not any(m["c"] < a["h"] for m in later) and a["h"] <= price:
+            cand.append({"tip": "FVG", "alt": a["h"], "ust": z["l"], "t": c[i + 1]["t"]})
+        if not bull and a["l"] > z["h"] and not any(m["c"] > a["l"] for m in later) and a["l"] >= price:
+            cand.append({"tip": "FVG", "alt": z["h"], "ust": a["l"], "t": c[i + 1]["t"]})
     for i in range(len(c) - 1):
         a, n, later = c[i], c[i + 1], c[i + 2:]
         if bull and a["c"] < a["o"] and n["c"] > a["h"] and body(n) > 1.2 * avg \
-                and not any(m["c"] < a["l"] for m in later) and sum(m["l"] <= a["h"] for m in later) < 2 and a["l"] <= price:
+                and not any(m["c"] < a["l"] for m in later) and a["l"] <= price:
             cand.append({"tip": "OB", "alt": a["l"], "ust": a["h"], "t": a["t"]})
         if not bull and a["c"] > a["o"] and n["c"] < a["l"] and body(n) > 1.2 * avg \
-                and not any(m["c"] > a["h"] for m in later) and sum(m["h"] >= a["l"] for m in later) < 2 and a["h"] >= price:
+                and not any(m["c"] > a["h"] for m in later) and a["h"] >= price:
             cand.append({"tip": "OB", "alt": a["l"], "ust": a["h"], "t": a["t"]})
     pad = price * 0.0015
     if bull:
         for i in swings(c, 2, "l"):
-            if not any(m["l"] < c[i]["l"] for m in c[i + 1:]) and c[i]["l"] < price:
+            if not any(m["c"] < c[i]["l"] for m in c[i + 1:]) and c[i]["l"] < price:
                 cand.append({"tip": "LIKIDITE", "alt": c[i]["l"] - pad, "ust": c[i]["l"], "t": c[i]["t"]})
     else:
         for i in swings(c, 2, "h"):
-            if not any(m["h"] > c[i]["h"] for m in c[i + 1:]) and c[i]["h"] > price:
+            if not any(m["c"] > c[i]["h"] for m in c[i + 1:]) and c[i]["h"] > price:
                 cand.append({"tip": "LIKIDITE", "alt": c[i]["h"], "ust": c[i]["h"] + pad, "t": c[i]["t"]})
     gun = (int(now_ms or time.time() * 1000) // 86400000) * 86400000
     pd = [m for m in c if gun - 86400000 <= m["t"] < gun]
@@ -649,6 +646,17 @@ def ajan_kontrol(W, c4, bias, kl, crt, ch, en, price):
     if kl["seviyeler"]:
         side = all((s["alt"] <= price) if bull else (s["ust"] >= price) for s in kl["seviyeler"])
         add("Key level'lar bias tarafında", "GECTI" if side else "KALDI")
+        kc = [m for m in c4 if m["closed"]]
+        kirik = []
+        for s in kl["seviyeler"]:
+            if s["tip"] not in ("FVG", "OB", "LIKIDITE"):
+                continue
+            sinir = (s["ust"] if s["tip"] == "LIKIDITE" else s["alt"]) if bull else (s["alt"] if s["tip"] == "LIKIDITE" else s["ust"])
+            bas = s["t"] + (8 if s["tip"] == "FVG" else 4 if s["tip"] == "OB" else 0) * 3600000
+            if any(((m["c"] < sinir) if bull else (m["c"] > sinir)) for m in kc if m["t"] > bas):
+                kirik.append(s.get("id", s["tip"]))
+        add("Key level'lar gövde kapanışıyla kırılmamış", "KALDI" if kirik else "GECTI",
+            ("kırılan: " + ", ".join(kirik)) if kirik else "fitil girişi seviyeyi bozmaz")
     x = crt.get("aktif")
     if not x:
         return bitir(L)
